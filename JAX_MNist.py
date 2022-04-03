@@ -24,9 +24,13 @@ from jax.example_libraries import stax, optimizers
 import torchvision
 import torch
 import torch.utils.data as data_utils
-from jax import numpy as jnp
+
 import time
-import random
+
+
+
+from jax import vmap
+from jax import random
 
 seed = 0
 mnist_img_size = (28, 28)
@@ -94,7 +98,7 @@ conv_init, conv_apply = stax.serial(
 
 def create_offsprings(n_offspr, fath_weights):
   statedic_list=[]
-  for i in range(0,100):
+  for i in range(0,n_offspr):
     dicta = [()] * len(father_weights)
     for idx,w in enumerate(father_weights):
         if w:
@@ -114,6 +118,10 @@ def create_offsprings(n_offspr, fath_weights):
     
     statedic_list.append(dicta)
   return statedic_list
+
+
+
+
 
 @jit
 def loss_fn(params, imgs, gt_lbls):
@@ -176,71 +184,60 @@ def bootstrapp_offspring_MLP(key,conv_weights, batch_affe, labelaffe,test_images
 def vmap_bootstrapp_offspring_MLP(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls):
   return vmap(bootstrapp_offspring_MLP, ( None,None, 0,0,0,0))(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls)
 
-#Test vmap_bootstrapp_offspring
-
-import jax.numpy as np
-from jax import vmap
-from jax import random
 
 
+# Commented out IPython magic to ensure Python compatibility.
+# #Test vmap_bootstrapp_offspring
+# %%time
+# 
+# 
+# 
+# rng = jax.random.PRNGKey(123)
+# 
+# father_weights = conv_init(rng, (batch_size,28,28,1))
+# father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
+# 
+# affe=create_offsprings(100, father_weights)
+# father_weights=affe[0]
+# 
+# n_samples = 150
+# batch_size = 25
+# n_offsp_epoch=10
+# 
+# train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+# train_lbl_off=train_lbls[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+# train_img_off=train_img_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
+# train_lbl_off=train_lbl_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
+# 
+# test_img_off=test_images[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
+# test_lbl_off=test_lbls[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
+# test_img_off=test_img_off.reshape(n_offsp_epoch,n_test,28,28,1)
+# test_lbl_off=test_lbl_off.reshape(n_offsp_epoch,n_test)
+# 
+# print(jnp.shape(train_img_off))
+# print(jnp.shape(train_lbl_off))
+# print(jnp.shape(test_img_off))
+# print(jnp.shape(test_lbl_off))
+# 
+# 
+# result_off=vmap_bootstrapp_offspring_MLP(rng,father_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
+# print(jnp.mean(result_off))
+# print(jnp.std(result_off))
 
-rng = jax.random.PRNGKey(123)
+#vmap_offspring_run
+rngkey_MLP = jax.random.PRNGKey(123)
+n_samples = 150
+batch_size = 25
+n_offsp_epoch=10
+n_metaepochs=10
+
 
 father_weights = conv_init(rng, (batch_size,28,28,1))
 father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
 
-affe=create_offsprings(100, father_weights)
-father_weights=affe[0]
-
-n_samples = 150
-batch_size = 25
-n_offsp_epoch=10
-
-train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-train_lbl_off=train_lbls[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-train_img_off=train_img_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
-train_lbl_off=train_lbl_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
-
-test_img_off=test_images[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
-test_lbl_off=test_lbls[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
-test_img_off=test_img_off.reshape(n_offsp_epoch,n_test,28,28,1)
-test_lbl_off=test_lbl_off.reshape(n_offsp_epoch,n_test)
-
-print(jnp.shape(train_img_off))
-print(jnp.shape(train_lbl_off))
-print(jnp.shape(test_img_off))
-print(jnp.shape(test_lbl_off))
-
-
-result_off=vmap_bootstrapp_offspring_MLP(rng,father_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
-print(jnp.mean(result_off))
-print(jnp.std(result_off))
-
-
-
-print(len(statedic_list[0][0][0]))
-print(len(father_weights[0][0]))
-print(type(statedic_list[0][0]))
-print(type(father_weights[0]))
-
-affe=create_offsprings(100, father_weights)
-
-affe[0]
-
-'''metaepoch data'''
-train_images = jnp.array(train_dataset.data,dtype="float32").reshape(len(train_dataset), -1)
-train_lbls = jnp.array(train_dataset.targets)
-
-test_images = jnp.array(test_dataset.data,dtype="float32").reshape(len(test_dataset), -1)
-test_lbls = jnp.array(test_dataset.targets)
-
 
 train_img_off=train_images[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
 train_lbl_off=train_lbls[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
-print("test")
-print(jnp.shape(train_img_off))
-print(jnp.shape(train_lbl_off))
-print("test")
 train_img_off=train_img_off.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
 train_lbl_off=train_lbl_off.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size)
 
@@ -253,10 +250,34 @@ print(jnp.shape(train_img_off))
 print(jnp.shape(train_lbl_off))
 print(jnp.shape(test_img_off))
 print(jnp.shape(test_lbl_off))
+key_matrix_seed=jnp.full((n_metaepochs,),np.arange(0, n_metaepochs, 1))
 
-print(jnp.shape(test_img_off))
+affe=vmap_offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP)
+affe
 
-n_metaepochs
+affe
+
+
+
+#original
+def vmap_offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP):
+  return vmap(offspring_run, ( 0,0, 0,0,0,None))(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP)
+
+@jit
+def offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP):
+
+  
+  
+  rng=jax.random.PRNGKey(key_matrix_seed)
+  key_matrix = conv_init(rng, (batch_size,28,28,1))[1]
+  key_matrix=jax.tree_map(lambda x: x*std_modifier, key_matrix)
+  conv_weights=jax.tree_map(lambda x,y: x+y, father_weights,key_matrix)
+
+
+  result_off=vmap_bootstrapp_offspring_MLP(rngkey_MLP,conv_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
+  return(jnp.mean(result_off)
+  #,jnp.std(result_off)
+  )
 
 
 
@@ -339,6 +360,51 @@ father_weights = father_weights[1] ## Weights are actually stored in second elem
 
 test_images = jnp.array(test_dataset.data,dtype="float32").reshape(len(test_dataset), -1)
 test_lbls = jnp.array(test_dataset.targets)
+
+'''metaepoch data'''
+train_images = jnp.array(train_dataset.data,dtype="float32").reshape(len(train_dataset), -1)
+train_lbls = jnp.array(train_dataset.targets)
+
+test_images = jnp.array(test_dataset.data,dtype="float32").reshape(len(test_dataset), -1)
+test_lbls = jnp.array(test_dataset.targets)
+
+
+train_img_off=train_images[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
+train_lbl_off=train_lbls[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
+train_img_off=train_img_off.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
+train_lbl_off=train_lbl_off.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size)
+
+test_img_off=test_images[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
+test_lbl_off=test_lbls[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
+test_img_off=test_img_off.reshape(n_metaepochs,n_offsp_epoch,n_test,28,28,1)
+test_lbl_off=test_lbl_off.reshape(n_metaepochs,n_offsp_epoch,n_test)
+
+print(jnp.shape(train_img_off))
+print(jnp.shape(train_lbl_off))
+print(jnp.shape(test_img_off))
+print(jnp.shape(test_lbl_off))
+
+#test
+def vmap_offspring_run(train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP):
+  return vmap(offspring_run, (0, 0,0,0,None))(train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP)
+
+@jit
+def offspring_run(train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP):
+
+  
+  key_matrix_seed=1
+  rng=jax.random.PRNGKey(key_matrix_seed)
+  key_matrix = conv_init(rng, (batch_size,28,28,1))[1]
+  key_matrix=jax.tree_map(lambda x: x*std_modifier, key_matrix)
+  #conv_weights=jax.tree_map(lambda x: x+jax.random.normal(rng)*std_modifier, father_weights)
+  #conv_weights=jax.tree_map(lambda x: x+jax.random.normal(rng)*std_modifier, father_weights)
+  #*std_modifier
+  conv_weights=jax.tree_map(lambda x,y: x+y, father_weights,key_matrix)
+
+  result_off=vmap_bootstrapp_offspring_MLP(rngkey_MLP,conv_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
+  return(jnp.mean(result_off)
+  #,jnp.std(result_off)
+  )
 
 from jax import random
 
@@ -709,3 +775,39 @@ def accuracy_test(test_images,test_lbls):
   #print("test_lbls",test_lbls.shape)
   #print("test_images",acc_test_images.shape)
   return accuracy(MLP_params, acc_test_images, test_lbls)
+
+#funkioniert nicht
+n_offspr=100
+fath_weights=father_weights
+
+statedic_list = jnp.empty(len(father_weights))
+#statedic_list=[]
+for i in range(0,n_offspr):
+  dicta = jnp.empty(0) 
+  #dicta = [()] * len(father_weights)
+  for idx,w in enumerate(father_weights):
+      if w:
+          w, b = w
+          #print("Weights : {}, Biases : {}".format(w.shape, b.shape))
+    
+          '''if weight layer only contains 0 and 1, only copy original weight layer, dont add random noise. Purpose of these 0 and 1 layers unclear'''
+          if any(w[0].shape==t for t in [(Convu1_in,) ,(Convu2_in,), (Convu3_in,)]):
+            x_w=w
+            x_b=b
+          else:
+            #seed=random.randint(rng,(0,100000)
+            key = random.PRNGKey(0)
+            x_w = w+random.normal(key,shape=w.shape)*std_modifier
+            x_b = b+random.normal(key,shape=b.shape)*std_modifier
+            weight=jnp.empty(0) 
+            weight=jnp.append(x_w,x_b, axis=None)
+          dicta=jnp.append(dicta,weight, axis=None)
+          print(jnp.shape(dicta))
+  statedic_list=jnp.append(statedic_list, dicta, axis=None)
+affe=statedic_list
+
+conv_weights=jax.tree_map(lambda x: x+jax.random.normal(convu_key)*std_modifier, father_weights)
+
+diff=jax.tree_map(lambda x,y: x-y, father_weights,conv_weights)
+
+jax.flatten_util.ravel_pytree(conv_weights)
