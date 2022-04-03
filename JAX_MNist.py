@@ -124,17 +124,6 @@ def loss_fn(params, imgs, gt_lbls):
     #print("predictions",predictions.shape)
     return -jnp.mean(predictions * gt_lbls)
 
-'''Problems here!!!'''
-@jit
-def accuracy(weights,params, dataset_imgs, dataset_lbls):
-    '''reshaping and adding axes, to adapt to code from internet, not pretty, but works'''
-
-    acc_test_images=dataset_imgs.reshape(-1,28,28)
-    acc_test_images=acc_test_images[:, :,:,np.newaxis]
-    acc_test_images = conv_apply(weights, acc_test_images)
-    acc_test_images = acc_test_images.reshape(*acc_test_images.shape[:1],-1) # Flatten
-    pred_classes = jnp.argmax(batched_MLP_predict(params, acc_test_images), axis=1)
-    return jnp.mean(dataset_lbls == pred_classes)
 
 @jit
 def update(params, imgs, gt_lbls, lr=0.01):
@@ -142,93 +131,54 @@ def update(params, imgs, gt_lbls, lr=0.01):
 
     return loss, jax.tree_multimap(lambda p, g: p - lr*g, params, grads)
 
-'''to do:
-- imgs still in numpy arra
-- check if weights stay the same'''
-@jit
-def train(key,conv_weights):
-  
-  # Create a MLP
-  MLP_params = init_MLP([NNin1, NNout1], key)
-
-  for epoch in range(n_training_epochs):
-      
-      for cnt, (imgs, lbls) in enumerate(train_loader):
-          if cnt >= n_samples/(batch_size*n_training_epochs):
-              break
-          if print_distribution_data:
-              print("label category counts:",np.unique(lbls, return_inverse=False, return_counts=True, axis=None)[1])
-              
-          
-
-          gt_labels = jax.nn.one_hot(lbls, 10)
-          
-          
-          
-            
-          imgs=np.moveaxis(imgs, 1, 3)
-          
-          imgs = conv_apply(conv_weights, imgs)
-          
-          imgs = imgs.reshape(*imgs.shape[:1],-1) # Flatten
-
-          loss, MLP_params = jit_update(MLP_params, imgs, gt_labels)
-          
-          #if cnt % 50 == 0:
-              #print(loss)
-  from jax import random
-
-  return loss,jit_accuracy(father_weights,MLP_params,test_images,test_lbls)
-  
-  #return loss,jit_accuracy(father_weights,MLP_params,test_images[random.randint(random.PRNGKey(0), (1000,), 0, 10000, dtype='uint8')],test_lbls[random.randint(random.PRNGKey(0), (1000,), 0, 10000, dtype='uint8')])
-
 jit_accuracy=jit(accuracy)
 jit_update=jit(update)
 jit_train=jit(train)
 
-jnp.shape(test_images)
-
-jit_accuracy(father_weights,MLP_params,test_images,test_lbls)
-
-'''Problems here!!!'''
 @jit
 def accuracy(conv_weights,MLP_params, dataset_imgs, dataset_lbls):
-    '''reshaping and adding axes, to adapt to code from internet, not pretty, but works'''
 
     imgs = conv_apply(conv_weights, dataset_imgs.reshape(-1,28,28,1))
-    print(jnp.shape(imgs))
     pred_classes = jnp.argmax(batched_MLP_predict(MLP_params, imgs.reshape(-1,2500)), axis=1)
 
     return jnp.mean(dataset_lbls == pred_classes)
 
+'''For loop is neccesary to do batch training. Every update iteration needs to run with updated MPL params'''
 @jit
 def train(conv_weights, imgs, lbls,MLP_params ):
   
- 
   for i in range(jnp.shape(imgs)[0]):
-    
+
     gt_labels = jax.nn.one_hot(lbls[i], 10)
     affe = conv_apply(conv_weights, imgs[i].reshape(-1,28,28,1))
     loss, MLP_params = jit_update(MLP_params, affe.reshape(-1,2500), gt_labels)
 
-    
-
   return MLP_params
+
+'''Input  
+(10, 6, 25, 28, 28, 1) train_img_off
+(10, 6, 25) train_lbl_off
+(10, 1000, 28, 28, 1) test_img_off
+(10, 1000) test_lbl_off
+          
+(n_offsp_epoch, n_samples/batch_size, batch size, 28, 28, 1)
+(n_offsp_epoch, n_samples/batch_size, batch size)
+(n_offsp_epoch, n_test, 28, 28, 1)
+(n_offsp_epoch, n_test)'''
+def bootstrapp_offspring_MLP(key,conv_weights, batch_affe, labelaffe,test_images,test_lbls):
+
+  MLP_params = init_MLP([NNin1, NNout1], key)
+  MLP_params_trained=jit_train(conv_weights, batch_affe, labelaffe,MLP_params )
+ 
   
-  #return loss,jit_accuracy(father_weights,MLP_params,test_images[random.randint(random.PRNGKey(0), (1000,), 0, 10000, dtype='uint8')],test_lbls[random.randint(random.PRNGKey(0), (1000,), 0, 10000, dtype='uint8')])
+  result=jit_accuracy(father_weights,MLP_params_trained,test_images,test_lbls)
+  return (result)
 
-train_img_off=train_images[random.randint(random.PRNGKey(0), (n_samples,), 0, 60000, dtype='uint8')]
-train_lbl_off=train_lbls[random.randint(random.PRNGKey(0), (n_samples,), 0, 60000, dtype='uint8')]
-train_img_off=train_img_off.reshape(int((n_samples/batch_size)),batch_size,28,28,1)
-train_lbl_off=train_lbl_off.reshape(int((n_samples/batch_size)),batch_size)
 
-'''print(jnp.shape(train_img_off)[0])
-print(jnp.shape(train_lbl_off))
-print(jnp.shape(train_lbl_off[0]))'''
-affe=vmap_batched_train(father_weights, train_img_off,train_lbl_off,MLP_params)
+def vmap_bootstrapp_offspring_MLP(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls):
+  return vmap(bootstrapp_offspring_MLP, ( None,None, 0,0,0,0))(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls)
 
-def vmap_batched_train(father_weights, batch_affe, labelaffe,MLP_params ):
-  return vmap(train, ( None, 1,1,None))(father_weights, batch_affe, labelaffe,MLP_params )
+#Test vmap_bootstrapp_offspring
 
 import jax.numpy as np
 from jax import vmap
@@ -245,13 +195,13 @@ n_samples = 150
 batch_size = 25
 n_offsp_epoch=10
 
-train_img_off=train_images[random.randint(random.PRNGKey(0), (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-train_lbl_off=train_lbls[random.randint(random.PRNGKey(0), (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+train_lbl_off=train_lbls[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
 train_img_off=train_img_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
 train_lbl_off=train_lbl_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
 
-test_img_off=test_images[random.randint(random.PRNGKey(0), (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
-test_lbl_off=test_lbls[random.randint(random.PRNGKey(0), (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
+test_img_off=test_images[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
+test_lbl_off=test_lbls[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
 test_img_off=test_img_off.reshape(n_offsp_epoch,n_test,28,28,1)
 test_lbl_off=test_lbl_off.reshape(n_offsp_epoch,n_test)
 
@@ -260,61 +210,16 @@ print(jnp.shape(train_lbl_off))
 print(jnp.shape(test_img_off))
 print(jnp.shape(test_lbl_off))
 
-print("========================")
-''''''
-def bootstrapp_offspring(key,conv_weights, batch_affe, labelaffe,test_images,test_lbls):
 
-  MLP_params = init_MLP([NNin1, NNout1], key)
-  MLP_params_trained=train(conv_weights, batch_affe, labelaffe,MLP_params )
-  #MLP_params_trained=vmap_batched_train(conv_weights, batch_affe, labelaffe,MLP_params) #vectorized training, for ex. 6*25 training examples. 
-  print(jnp.shape(test_images))
-  print(jnp.shape(test_lbls))
-  print("jnp.shape(test_img_off)")
-  
-  result=jit_accuracy(father_weights,MLP_params_trained,test_images,test_lbls)
-  return (result)
-
-def vmap_bootstrapp_offspring(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls):
-  return vmap(bootstrapp_offspring, ( None,None, 0,0,0,0))(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls)
-
-def vmap_bootstrapp_offspring(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls):
-  return vmap(bootstrapp_offspring, ( None,None, 0,0,None,None))(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls)
-
-jnp.mean(vmap_bootstrapp_offspring(rng,father_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off))
-
-
-
-MLP_params = init_MLP([NNin1, NNout1], key)
-
-MLP_params=(train(key,father_weights, trainaffe, labelaffe,MLP_params ))
-
-print(jit_accuracy(father_weights,MLP_params,test_images,test_lbls))
-
-## Accuracy testing
-
-test_img_off=test_images[random.randint(random.PRNGKey(0), (n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
-test_lbl_off=test_lbls[random.randint(random.PRNGKey(0), (n_test,), 0, 10000, dtype='uint8')]
-test_img_off=test_img_off.reshape(n_test,28,28,1)
-test_lbl_off=test_lbl_off.reshape(n_test)
-
-print(jnp.shape(train_img_off))
-print(jnp.shape(train_lbl_off))
-print(jnp.shape(test_img_off))
-print(jnp.shape(test_lbl_off))
-
-(10, 1000, 28, 28, 1)
-(10, 1000)
-
-imgs = conv_apply(father_weights, test_img_off.reshape(-1,28,28,1))
-print(jnp.shape(imgs))
-pred_classes = jnp.argmax(batched_MLP_predict(MLP_params, imgs.reshape(-1,2500)), axis=1)
-
-print(jnp.mean(test_lbl_off == pred_classes))
+result_off=vmap_bootstrapp_offspring_MLP(rng,father_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
+print(jnp.mean(result_off))
+print(jnp.std(result_off))
 
 
 
 
 
+'''Initialize Variables'''
 n_metaepochs=100
 n_offsprings=100
 n_offsp_epoch=1
@@ -385,10 +290,6 @@ father_weights = father_weights[1] ## Weights are actually stored in second elem
 # 
 # print(offsp_epoch_list)
 
-offsp_epoch_list[0]
-
-accuracy(conv_weights,MLP_params,test_images,test_lbls)
-
 """# **Testing**"""
 
 test_images = jnp.array(test_dataset.data,dtype="float32").reshape(len(test_dataset), -1)
@@ -401,6 +302,23 @@ random.randint(random.PRNGKey(0), (10000,), 0, 10000, dtype='uint8')
 np.random.randint(10000, size=150)
 a=(test_lbls)[np.random.randint(10000, size=150)]
 a[0]
+
+## Accuracy testing
+test_img_off=test_images[random.randint(random.PRNGKey(0), (n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
+test_lbl_off=test_lbls[random.randint(random.PRNGKey(0), (n_test,), 0, 10000, dtype='uint8')]
+test_img_off=test_img_off.reshape(n_test,28,28,1)
+test_lbl_off=test_lbl_off.reshape(n_test)
+print(jnp.shape(train_img_off))
+print(jnp.shape(train_lbl_off))
+print(jnp.shape(test_img_off))
+print(jnp.shape(test_lbl_off))
+
+
+imgs = conv_apply(father_weights, test_img_off.reshape(-1,28,28,1))
+print(jnp.shape(imgs))
+pred_classes = jnp.argmax(batched_MLP_predict(MLP_params, imgs.reshape(-1,2500)), axis=1)
+
+print(jnp.mean(test_lbl_off == pred_classes))
 
 """# **Funktions**"""
 
