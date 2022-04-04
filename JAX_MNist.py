@@ -26,9 +26,8 @@ import torch
 import torch.utils.data as data_utils
 
 import time
-
-
-
+from jax.example_libraries import stax
+from jax.example_libraries.stax import Dense, Relu, LogSoftmax
 from jax import vmap
 from jax import random
 
@@ -360,6 +359,8 @@ def best_index_bestperformer(lista):
 seed = 0
 mnist_img_size = (28, 28)
 
+
+
 def init_MLP(layer_widths, parent_key, scale=0.01):
 
     params = []
@@ -409,6 +410,8 @@ jit_MLP_predict=jit(MLP_predict)
 def batched_MLP_predict(params,x):
   return vmap(jit_MLP_predict, ( None, 0))(params,x)
 jit_batched_MLP_predict=jit(batched_MLP_predict)
+
+
 
 def vmap_bootstrapp_offspring_MLP(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls):
   return vmap(jit_bootstrapp_offspring_MLP, ( None,None, 0,0,0,0))(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls)
@@ -497,7 +500,8 @@ def train(conv_weights, imgs, lbls,MLP_params ):
 
 @jit
 def bootstrapp_offspring_MLP(key,conv_weights, batch_affe, labelaffe,test_images,test_lbls):
-
+  
+  
   MLP_params = init_MLP([NNin1, NNout1], key)
   MLP_params_trained=jit_train(conv_weights, batch_affe, labelaffe,MLP_params )
  
@@ -508,58 +512,72 @@ def bootstrapp_offspring_MLP(key,conv_weights, batch_affe, labelaffe,test_images
 @jit
 def vmap_bootstrapp_offspring_MLP(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls):
   return vmap(jit_bootstrapp_offspring_MLP, ( None,None, 0,0,0,0))(key, conv_weights, batch_affe, labelaffe,test_images,test_lbls)
-
 jit_vmap_bootstrapp_offspring_MLP=jit(vmap_bootstrapp_offspring_MLP)
+
 jit_bootstrapp_offspring_MLP=jit(bootstrapp_offspring_MLP)
 jit_accuracy=jit(accuracy)
 jit_update=jit(update)
 jit_train=jit(train)
 
+n_samples = 150
+batch_size = 25
+n_offsp_epoch=10
+
+rngkey_MLP = jax.random.PRNGKey(123)
+rng=jax.random.PRNGKey(122)
+n_samples = 150
+batch_size = 25
+n_offsp_epoch=10
+n_metaepochs=100
+
 # Commented out IPython magic to ensure Python compatibility.
 # #Test vmap_bootstrapp_offspring
 # %%time
-# 
-# 
-# 
-# rng = jax.random.PRNGKey(123)
-# 
-# father_weights = conv_init(rng, (batch_size,28,28,1))
+# result=[]
+# father_key=jax.random.PRNGKey(122)
+# father_weights = conv_init(father_key, (batch_size,28,28,1))
 # father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
 # 
+# for i in range(n_metaepochs):
 # 
-# n_samples = 150
-# batch_size = 25
-# n_offsp_epoch=10
+#   rng = jax.random.PRNGKey(i)
 # 
-# train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-# train_lbl_off=train_lbls[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-# train_img_off=train_img_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
-# train_lbl_off=train_lbl_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
-# 
-# test_img_off=test_images[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
-# test_lbl_off=test_lbls[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
-# test_img_off=test_img_off.reshape(n_offsp_epoch,n_test,28,28,1)
-# test_lbl_off=test_lbl_off.reshape(n_offsp_epoch,n_test)
-# 
-# print(jnp.shape(train_img_off))
-# print(jnp.shape(train_lbl_off))
-# print(jnp.shape(test_img_off))
-# print(jnp.shape(test_lbl_off))
+#   key_matrix = conv_init(rng, (batch_size,28,28,1))[1]
+#   key_matrix=jax.tree_map(lambda x: x*std_modifier, key_matrix)
+#   conv_weights=jax.tree_map(lambda x,y: x+y, father_weights,key_matrix)
 # 
 # 
-# result_off=jit_vmap_bootstrapp_offspring_MLP(rng,father_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
-# print(jnp.mean(result_off))
-# print(jnp.std(result_off))
+# 
+#   train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+#   train_lbl_off=train_lbls[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+#   train_img_off=train_img_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
+#   train_lbl_off=train_lbl_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
+# 
+#   test_img_off=test_images[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
+#   test_lbl_off=test_lbls[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
+#   test_img_off=test_img_off.reshape(n_offsp_epoch,n_test,28,28,1)
+#   test_lbl_off=test_lbl_off.reshape(n_offsp_epoch,n_test)
+# 
+#   #print(jnp.shape(train_img_off))
+#   #print(jnp.shape(train_lbl_off))
+#   #print(jnp.shape(test_img_off))
+#   #print(jnp.shape(test_lbl_off))
+# 
+# 
+#   result_off=jit_vmap_bootstrapp_offspring_MLP(rng,father_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
+#   #result=result.append([jnp.mean(result_off),jnp.std(result_off)])
+#   result.append([float(jnp.mean(result_off)),float(jnp.std(result_off))])
+#
+
+result
+
+
 
 # Commented out IPython magic to ensure Python compatibility.
 # %%time
+# '''VMap/Batch of whole metaepoch. Runnning with 5 metaepochs, Kernel crushing with 10'''
 # #vmap_offspring_run
-# rngkey_MLP = jax.random.PRNGKey(123)
-# rng=jax.random.PRNGKey(122)
-# n_samples = 150
-# batch_size = 25
-# n_offsp_epoch=10
-# n_metaepochs=10
+# 
 # 
 # 
 # father_weights = conv_init(rng, (batch_size,28,28,1))
