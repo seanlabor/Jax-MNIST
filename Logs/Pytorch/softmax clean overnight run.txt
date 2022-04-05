@@ -1,0 +1,1037 @@
+class Convu(nn.Module):
+    def __init__(self):
+        super(Convu, self).__init__() 
+        
+        self.requires_grad_(False)
+        self.conv1 = nn.Sequential(         
+            nn.Conv2d(
+                in_channels=Convu_in1,              
+                out_channels=Convu_out1,            
+                kernel_size=kernelsize_,              
+                stride=1,                   
+                padding=2),                              
+            nn.ReLU(),                      
+            nn.MaxPool2d(kernel_size=2),)
+        self.conv2 = nn.Sequential(         
+            nn.Conv2d(Convu_out1, Convu_out2, kernelsize_, 1, 2),     
+            nn.ReLU(),                      
+            nn.MaxPool2d(2),)    
+        
+          
+        
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)        # flatten the output of conv2 to (batch_size, 32 * 7 * 7)
+        x = x.view(x.size(0), -1)       
+        self.requires_grad_(False)
+        return x    # return x for visualization
+
+
+'''Set your file directorys'''
+
+googledrive_path="/content/drive/MyDrive/Colab Notebooks/MNist/"
+local_path="C:/Users/Flo/Documents/Uni/Masterarbeit/Hanabi/Mnist handwritten digits/"
+
+'''set global seeds'''
+
+seed = 0
+torch.manual_seed(seed)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(seed)
+np.random.seed(seed)
+torch.cuda.manual_seed(seed)
+random.seed(seed)
+
+'''Logging to screen options'''
+print_distribution_data=False
+
+'''number of training epochs for Network2'''
+n_training_epochs = 1 #number of training epochs for every NN2.  
+n_offsp_epoch = 10 #number of training and testing runs combined, to get an average for the performance of the Convu net.
+n_testing_epochs = 3 # number of testing runs, per n_offsp_epoch
+
+'''parameter Network2'''
+n_samples = 100/n_training_epochs  #Number of training samples for NN2, distribution of data for 600: [68, 59, 66, 67, 47, 46, 65, 71, 53, 58])
+n_test=500 #Number of test samples for NN2. Needs to be multiples of batch_size_test=500 )
+batch_size_train = 20 # for precise n_samples number must be: n_samples%batch_size_train=0
+batch_size_test = 500 #for precise n_test number must be: n_test%batch_size_test=0
+learning_rate = 0.1
+momentum = 0.5
+log_interval = 10
+
+
+
+'''Standard deviation for gaussian noise in Network1'''
+'''!!! Important hyperparameter, >=1 gives bad results'''
+std_modifier=0.05
+
+
+# !!! ATM Overriden in main code part
+'''number of offsprings per metaepoch'''
+n_offsprings=25
+'''number of metaopochs'''
+n_metaepochs=3
+''''Elitist: Keep parent in offspring_list as [0]:'''
+elitist=True
+#'''True keeps standard Convu weights from pytorch, leads to very good results from the beginning (cheating?)'''
+#firstelitist=False'
+
+'''06.02.2022 manually reduced to one layer'''
+#'''NeuralNet'''
+NNin1=1536
+NNout1=10
+#NNout2=10
+
+'''Convunet'''
+Convu_in1=1
+Convu_out1=12
+Convu_out2=24
+kernelsize_=3 #if changed, NNin1 needs to be adapted aswell
+
+'''Not sure about purpose of these variables anymore'''
+#torch.use_deterministic_algorithms(False)
+#torch.backends.cudnn.enabled = True
+#torch.backends.cudnn.deterministic = False
+#torch.backends.cudnn.benchmark = True
+
+
+
+'''logging to screen variables'''
+print_offsprings=False
+print_distribution_data=False
+use_sigma_decay=True #otherwise using constant sigma from config tab
+sigma_start=1 
+sigma_goal=0.05 #sigma goal after n_metaepochs
+        
+'''choose either method, softmax or elitist=keep only best offspring'''
+use_softmax=True
+temperature=0.05
+use_elitist=False
+
+
+n_metaepochs=30 #overwriting variable from config tab, delete later
+n_offsprings=100 #overwriting variable from config tab, delete later
+
+'''number of training epochs for Network2'''
+n_offsp_epoch = 10
+n_testing_epochs = 5
+
+
+
+
+on google
+Log path: /content/drive/MyDrive/Colab Notebooks/MNist/Logs/04.04.2022_22.07
+Metaepoch:0
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:0
+Best Offspring:46, with 0.25 accuracy and 0.06 std
+Time per metaepoch:1656.3s
+accuracy_list metaepoch 0: [0.149 0.158 0.179 0.194 0.176 0.16  0.18  0.155 0.163 0.123 0.154 0.179
+ 0.172 0.114 0.229 0.157 0.176 0.158 0.128 0.17  0.169 0.142 0.149 0.143
+ 0.153 0.148 0.137 0.132 0.169 0.171 0.2   0.168 0.124 0.175 0.128 0.128
+ 0.141 0.15  0.149 0.204 0.11  0.145 0.145 0.207 0.15  0.119 0.248 0.173
+ 0.178 0.131 0.15  0.137 0.154 0.15  0.147 0.143 0.182 0.13  0.117 0.132
+ 0.188 0.168 0.215 0.124 0.173 0.149 0.174 0.135 0.149 0.232 0.146 0.158
+ 0.156 0.136 0.155 0.138 0.148 0.151 0.183 0.183 0.137 0.157 0.137 0.166
+ 0.12  0.158 0.2   0.162 0.165 0.189 0.15  0.169 0.178 0.118 0.158 0.174
+ 0.115 0.135 0.208 0.157]
+average mean metaepoch:0.16
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:1
+Softmax_vec: [0.007 0.008 0.013 0.017 0.012 0.009 0.013 0.008 0.009 0.004 0.008 0.013
+ 0.011 0.003 0.035 0.008 0.012 0.009 0.005 0.011 0.011 0.006 0.007 0.006
+ 0.008 0.007 0.006 0.005 0.01  0.011 0.02  0.01  0.004 0.012 0.005 0.005
+ 0.006 0.007 0.007 0.021 0.003 0.007 0.006 0.023 0.007 0.004 0.051 0.011
+ 0.013 0.005 0.007 0.006 0.008 0.007 0.007 0.006 0.014 0.005 0.004 0.005
+ 0.015 0.01  0.026 0.004 0.011 0.007 0.012 0.005 0.007 0.037 0.007 0.008
+ 0.008 0.005 0.008 0.006 0.007 0.007 0.014 0.014 0.006 0.008 0.006 0.01
+ 0.004 0.008 0.02  0.009 0.01  0.016 0.007 0.011 0.013 0.004 0.009 0.012
+ 0.004 0.005 0.023 0.008]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:1
+Best Offspring:28, with 0.23 accuracy and 0.07 std
+Time per metaepoch:1666.8s
+accuracy_list metaepoch 1: [0.13  0.135 0.18  0.188 0.174 0.172 0.13  0.215 0.173 0.178 0.175 0.182
+ 0.131 0.177 0.115 0.144 0.196 0.133 0.21  0.177 0.181 0.159 0.158 0.203
+ 0.123 0.126 0.197 0.147 0.229 0.206 0.13  0.175 0.183 0.129 0.141 0.18
+ 0.19  0.19  0.144 0.133 0.154 0.191 0.173 0.159 0.187 0.172 0.177 0.137
+ 0.138 0.21  0.175 0.145 0.159 0.212 0.171 0.143 0.229 0.159 0.138 0.182
+ 0.157 0.174 0.175 0.182 0.134 0.186 0.152 0.177 0.147 0.155 0.206 0.15
+ 0.125 0.186 0.135 0.199 0.195 0.167 0.143 0.138 0.141 0.178 0.182 0.162
+ 0.146 0.139 0.169 0.146 0.155 0.183 0.187 0.183 0.183 0.161 0.156 0.139
+ 0.18  0.14  0.138 0.17 ]
+average mean metaepoch:0.17
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:2
+Softmax_vec: [0.004 0.005 0.012 0.014 0.01  0.01  0.004 0.023 0.01  0.011 0.01  0.012
+ 0.004 0.011 0.003 0.006 0.016 0.005 0.021 0.011 0.012 0.008 0.007 0.019
+ 0.004 0.004 0.016 0.006 0.031 0.019 0.004 0.01  0.012 0.004 0.005 0.012
+ 0.014 0.014 0.006 0.005 0.007 0.014 0.01  0.008 0.013 0.01  0.011 0.005
+ 0.005 0.021 0.011 0.006 0.008 0.022 0.01  0.006 0.031 0.008 0.005 0.012
+ 0.007 0.01  0.011 0.012 0.005 0.013 0.007 0.011 0.006 0.007 0.019 0.006
+ 0.004 0.013 0.005 0.017 0.016 0.009 0.006 0.005 0.005 0.011 0.012 0.008
+ 0.006 0.005 0.009 0.006 0.007 0.012 0.013 0.012 0.012 0.008 0.007 0.005
+ 0.012 0.005 0.005 0.01 ]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:2
+Best Offspring:38, with 0.27 accuracy and 0.06 std
+Time per metaepoch:1654.7s
+accuracy_list metaepoch 2: [0.156 0.136 0.148 0.174 0.198 0.185 0.156 0.18  0.264 0.185 0.19  0.212
+ 0.172 0.13  0.176 0.171 0.164 0.207 0.195 0.176 0.175 0.213 0.158 0.185
+ 0.155 0.205 0.146 0.197 0.171 0.223 0.174 0.207 0.162 0.16  0.189 0.154
+ 0.181 0.113 0.273 0.217 0.149 0.191 0.162 0.138 0.178 0.188 0.195 0.167
+ 0.142 0.176 0.128 0.214 0.161 0.228 0.192 0.173 0.18  0.191 0.17  0.119
+ 0.149 0.155 0.21  0.232 0.145 0.139 0.164 0.198 0.156 0.152 0.172 0.205
+ 0.163 0.145 0.183 0.174 0.13  0.227 0.204 0.172 0.215 0.202 0.174 0.211
+ 0.246 0.156 0.188 0.233 0.162 0.144 0.184 0.165 0.206 0.197 0.155 0.167
+ 0.176 0.146 0.168 0.209]
+average mean metaepoch:0.18
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:3
+Softmax_vec: [0.005 0.004 0.004 0.008 0.012 0.009 0.005 0.008 0.045 0.009 0.01  0.016
+ 0.007 0.003 0.008 0.007 0.006 0.015 0.011 0.008 0.008 0.016 0.005 0.009
+ 0.005 0.014 0.004 0.012 0.007 0.02  0.007 0.014 0.006 0.006 0.01  0.005
+ 0.009 0.002 0.055 0.018 0.005 0.011 0.006 0.004 0.008 0.01  0.011 0.006
+ 0.004 0.008 0.003 0.017 0.006 0.022 0.011 0.007 0.008 0.011 0.007 0.003
+ 0.005 0.005 0.015 0.024 0.004 0.004 0.006 0.012 0.005 0.005 0.007 0.014
+ 0.006 0.004 0.009 0.007 0.003 0.022 0.014 0.007 0.017 0.013 0.008 0.016
+ 0.032 0.005 0.01  0.024 0.006 0.004 0.009 0.006 0.014 0.012 0.005 0.007
+ 0.008 0.004 0.007 0.015]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:3
+Best Offspring:60, with 0.27 accuracy and 0.11 std
+Time per metaepoch:1664.2s
+accuracy_list metaepoch 3: [0.216 0.173 0.2   0.142 0.165 0.182 0.262 0.151 0.149 0.129 0.2   0.169
+ 0.196 0.176 0.162 0.162 0.243 0.166 0.195 0.216 0.196 0.209 0.195 0.206
+ 0.21  0.222 0.164 0.196 0.21  0.146 0.209 0.203 0.145 0.199 0.2   0.118
+ 0.221 0.173 0.181 0.209 0.174 0.152 0.184 0.218 0.256 0.233 0.217 0.14
+ 0.14  0.145 0.116 0.201 0.198 0.167 0.131 0.209 0.226 0.164 0.227 0.162
+ 0.268 0.184 0.172 0.148 0.149 0.156 0.244 0.149 0.168 0.191 0.255 0.238
+ 0.161 0.149 0.22  0.184 0.185 0.157 0.205 0.197 0.22  0.212 0.184 0.195
+ 0.175 0.124 0.199 0.224 0.225 0.18  0.237 0.184 0.179 0.232 0.174 0.163
+ 0.175 0.174 0.2   0.247]
+average mean metaepoch:0.19
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:4
+Softmax_vec: [0.014 0.006 0.01  0.003 0.005 0.007 0.035 0.004 0.004 0.002 0.01  0.005
+ 0.009 0.006 0.005 0.005 0.024 0.005 0.009 0.014 0.009 0.012 0.009 0.011
+ 0.012 0.016 0.005 0.009 0.012 0.003 0.012 0.011 0.003 0.01  0.01  0.002
+ 0.015 0.006 0.007 0.012 0.006 0.004 0.007 0.014 0.031 0.02  0.014 0.003
+ 0.003 0.003 0.002 0.01  0.01  0.005 0.003 0.012 0.017 0.005 0.017 0.005
+ 0.04  0.007 0.006 0.004 0.004 0.004 0.024 0.004 0.005 0.008 0.03  0.022
+ 0.005 0.004 0.015 0.007 0.007 0.004 0.011 0.01  0.015 0.013 0.007 0.009
+ 0.006 0.002 0.01  0.016 0.017 0.007 0.021 0.007 0.007 0.019 0.006 0.005
+ 0.006 0.006 0.01  0.026]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:4
+Best Offspring:51, with 0.29 accuracy and 0.09 std
+Time per metaepoch:1661.8s
+accuracy_list metaepoch 4: [0.246 0.173 0.144 0.15  0.239 0.22  0.208 0.229 0.189 0.242 0.191 0.202
+ 0.217 0.163 0.19  0.252 0.218 0.221 0.177 0.227 0.168 0.198 0.149 0.177
+ 0.243 0.217 0.218 0.213 0.188 0.243 0.199 0.163 0.161 0.243 0.17  0.206
+ 0.146 0.227 0.18  0.181 0.228 0.224 0.184 0.233 0.172 0.19  0.177 0.215
+ 0.201 0.198 0.196 0.289 0.157 0.162 0.248 0.284 0.186 0.249 0.232 0.222
+ 0.185 0.178 0.195 0.153 0.268 0.229 0.151 0.225 0.222 0.168 0.164 0.234
+ 0.177 0.176 0.233 0.22  0.161 0.22  0.199 0.177 0.205 0.222 0.177 0.26
+ 0.263 0.214 0.226 0.211 0.215 0.154 0.246 0.219 0.188 0.211 0.228 0.222
+ 0.225 0.274 0.207 0.214]
+average mean metaepoch:0.21
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:5
+Softmax_vec: [0.018 0.004 0.002 0.003 0.016 0.011 0.008 0.013 0.006 0.017 0.006 0.008
+ 0.01  0.003 0.006 0.021 0.01  0.011 0.005 0.012 0.004 0.007 0.003 0.005
+ 0.017 0.01  0.01  0.009 0.006 0.017 0.007 0.003 0.003 0.017 0.004 0.008
+ 0.002 0.012 0.005 0.005 0.012 0.012 0.005 0.014 0.004 0.006 0.005 0.01
+ 0.007 0.007 0.007 0.043 0.003 0.003 0.019 0.038 0.005 0.019 0.014 0.011
+ 0.005 0.005 0.007 0.003 0.028 0.013 0.003 0.012 0.011 0.004 0.003 0.014
+ 0.005 0.004 0.014 0.011 0.003 0.011 0.007 0.005 0.008 0.011 0.005 0.024
+ 0.026 0.009 0.012 0.009 0.01  0.003 0.018 0.011 0.006 0.009 0.013 0.011
+ 0.012 0.032 0.008 0.009]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:5
+Best Offspring:24, with 0.33 accuracy and 0.07 std
+Time per metaepoch:1664.9s
+accuracy_list metaepoch 5: [0.188 0.217 0.189 0.169 0.252 0.241 0.19  0.186 0.264 0.208 0.184 0.254
+ 0.208 0.2   0.211 0.223 0.17  0.166 0.261 0.214 0.208 0.203 0.225 0.251
+ 0.326 0.265 0.181 0.258 0.212 0.25  0.233 0.255 0.171 0.214 0.253 0.21
+ 0.217 0.203 0.233 0.197 0.181 0.221 0.249 0.225 0.163 0.22  0.204 0.194
+ 0.228 0.212 0.169 0.289 0.271 0.276 0.208 0.208 0.266 0.207 0.206 0.189
+ 0.193 0.222 0.243 0.254 0.214 0.234 0.217 0.254 0.223 0.212 0.245 0.218
+ 0.215 0.234 0.178 0.186 0.195 0.201 0.228 0.219 0.195 0.245 0.239 0.212
+ 0.196 0.273 0.232 0.214 0.251 0.171 0.221 0.238 0.17  0.201 0.236 0.276
+ 0.262 0.24  0.246 0.265]
+average mean metaepoch:0.22
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:6
+Softmax_vec: [0.004 0.007 0.004 0.003 0.015 0.012 0.004 0.004 0.019 0.006 0.004 0.016
+ 0.006 0.005 0.007 0.008 0.003 0.003 0.018 0.007 0.006 0.006 0.009 0.015
+ 0.066 0.019 0.004 0.017 0.007 0.014 0.01  0.016 0.003 0.007 0.015 0.006
+ 0.007 0.006 0.01  0.005 0.004 0.008 0.014 0.009 0.003 0.008 0.006 0.005
+ 0.009 0.007 0.003 0.032 0.022 0.024 0.006 0.006 0.02  0.006 0.006 0.004
+ 0.005 0.008 0.012 0.016 0.007 0.011 0.007 0.016 0.008 0.007 0.013 0.008
+ 0.007 0.011 0.003 0.004 0.005 0.005 0.009 0.008 0.005 0.013 0.012 0.007
+ 0.005 0.023 0.01  0.007 0.015 0.003 0.008 0.011 0.003 0.005 0.011 0.024
+ 0.018 0.012 0.013 0.02 ]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:6
+Best Offspring:84, with 0.29 accuracy and 0.09 std
+Time per metaepoch:1671.2s
+accuracy_list metaepoch 6: [0.248 0.249 0.239 0.249 0.195 0.213 0.254 0.264 0.258 0.175 0.229 0.267
+ 0.263 0.246 0.189 0.216 0.238 0.19  0.222 0.257 0.246 0.217 0.244 0.198
+ 0.232 0.187 0.189 0.224 0.204 0.257 0.18  0.232 0.232 0.198 0.207 0.238
+ 0.22  0.171 0.276 0.195 0.197 0.199 0.245 0.229 0.245 0.22  0.243 0.222
+ 0.243 0.232 0.262 0.184 0.243 0.222 0.212 0.214 0.198 0.227 0.216 0.23
+ 0.202 0.205 0.223 0.197 0.181 0.202 0.257 0.217 0.201 0.267 0.278 0.192
+ 0.192 0.231 0.258 0.219 0.224 0.203 0.219 0.201 0.175 0.215 0.201 0.199
+ 0.286 0.208 0.177 0.256 0.213 0.28  0.218 0.207 0.239 0.213 0.183 0.183
+ 0.256 0.223 0.243 0.22 ]
+average mean metaepoch:0.22
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:7
+Softmax_vec: [0.014 0.015 0.012 0.015 0.005 0.007 0.016 0.02  0.017 0.003 0.01  0.021
+ 0.02  0.014 0.004 0.008 0.012 0.004 0.009 0.017 0.014 0.008 0.013 0.005
+ 0.01  0.004 0.004 0.009 0.006 0.017 0.004 0.01  0.01  0.005 0.006 0.012
+ 0.008 0.003 0.025 0.005 0.005 0.005 0.014 0.01  0.013 0.008 0.013 0.008
+ 0.013 0.01  0.019 0.004 0.013 0.009 0.007 0.007 0.005 0.009 0.008 0.01
+ 0.006 0.006 0.009 0.005 0.004 0.006 0.017 0.008 0.006 0.021 0.026 0.005
+ 0.005 0.01  0.017 0.008 0.009 0.006 0.008 0.006 0.003 0.007 0.006 0.005
+ 0.031 0.006 0.003 0.017 0.007 0.027 0.008 0.006 0.012 0.007 0.004 0.004
+ 0.017 0.009 0.013 0.008]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:7
+Best Offspring:94, with 0.33 accuracy and 0.05 std
+Time per metaepoch:1687.8s
+accuracy_list metaepoch 7: [0.201 0.252 0.215 0.246 0.257 0.253 0.263 0.157 0.169 0.278 0.192 0.233
+ 0.27  0.214 0.265 0.228 0.198 0.215 0.201 0.246 0.232 0.248 0.233 0.294
+ 0.246 0.267 0.244 0.272 0.179 0.232 0.266 0.249 0.254 0.257 0.264 0.183
+ 0.192 0.187 0.17  0.241 0.266 0.239 0.255 0.206 0.259 0.234 0.21  0.196
+ 0.227 0.259 0.212 0.228 0.167 0.22  0.211 0.224 0.251 0.266 0.257 0.197
+ 0.236 0.182 0.17  0.173 0.27  0.241 0.222 0.224 0.156 0.178 0.229 0.273
+ 0.198 0.208 0.282 0.268 0.144 0.265 0.266 0.289 0.207 0.25  0.209 0.224
+ 0.251 0.224 0.21  0.246 0.195 0.183 0.226 0.234 0.187 0.279 0.333 0.253
+ 0.192 0.215 0.207 0.271]
+average mean metaepoch:0.23
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:8
+Softmax_vec: [0.004 0.012 0.006 0.011 0.014 0.013 0.015 0.002 0.002 0.021 0.004 0.008
+ 0.018 0.006 0.016 0.008 0.004 0.006 0.004 0.011 0.008 0.011 0.008 0.029
+ 0.011 0.017 0.011 0.019 0.003 0.008 0.016 0.012 0.013 0.014 0.016 0.003
+ 0.004 0.003 0.002 0.01  0.016 0.009 0.013 0.005 0.014 0.009 0.005 0.004
+ 0.008 0.014 0.006 0.008 0.002 0.006 0.005 0.007 0.012 0.016 0.014 0.004
+ 0.009 0.003 0.002 0.003 0.018 0.01  0.007 0.007 0.002 0.003 0.008 0.019
+ 0.004 0.005 0.023 0.017 0.001 0.016 0.016 0.026 0.005 0.012 0.005 0.007
+ 0.012 0.007 0.005 0.011 0.004 0.003 0.007 0.009 0.003 0.021 0.063 0.013
+ 0.004 0.006 0.005 0.018]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:8
+Best Offspring:30, with 0.31 accuracy and 0.06 std
+Time per metaepoch:1706.8s
+accuracy_list metaepoch 8: [0.291 0.244 0.215 0.191 0.244 0.301 0.217 0.223 0.227 0.253 0.283 0.244
+ 0.304 0.232 0.268 0.29  0.252 0.242 0.208 0.245 0.302 0.183 0.219 0.24
+ 0.22  0.251 0.282 0.271 0.213 0.257 0.309 0.236 0.243 0.226 0.275 0.245
+ 0.226 0.218 0.287 0.247 0.266 0.267 0.253 0.268 0.271 0.256 0.239 0.198
+ 0.298 0.253 0.279 0.255 0.195 0.207 0.254 0.246 0.264 0.302 0.281 0.234
+ 0.228 0.276 0.228 0.296 0.21  0.213 0.28  0.217 0.226 0.214 0.247 0.296
+ 0.27  0.265 0.25  0.197 0.209 0.195 0.265 0.265 0.232 0.252 0.298 0.245
+ 0.309 0.298 0.286 0.235 0.242 0.233 0.208 0.204 0.26  0.254 0.184 0.256
+ 0.245 0.253 0.253 0.213]
+average mean metaepoch:0.25
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:9
+Softmax_vec: [0.019 0.008 0.004 0.003 0.008 0.024 0.004 0.005 0.005 0.009 0.017 0.008
+ 0.025 0.006 0.012 0.019 0.009 0.007 0.004 0.008 0.024 0.002 0.005 0.007
+ 0.005 0.009 0.016 0.013 0.004 0.01  0.028 0.006 0.007 0.005 0.014 0.008
+ 0.005 0.005 0.018 0.008 0.012 0.012 0.009 0.012 0.013 0.01  0.007 0.003
+ 0.022 0.009 0.015 0.01  0.003 0.004 0.009 0.008 0.011 0.024 0.016 0.006
+ 0.005 0.014 0.006 0.022 0.004 0.004 0.016 0.004 0.005 0.004 0.008 0.021
+ 0.013 0.012 0.009 0.003 0.004 0.003 0.012 0.012 0.006 0.009 0.023 0.008
+ 0.028 0.022 0.018 0.006 0.007 0.006 0.004 0.003 0.01  0.009 0.002 0.01
+ 0.008 0.009 0.009 0.004]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:9
+Best Offspring:13, with 0.34 accuracy and 0.05 std
+Time per metaepoch:1685.8s
+accuracy_list metaepoch 9: [0.198 0.233 0.269 0.266 0.289 0.203 0.252 0.252 0.189 0.247 0.21  0.261
+ 0.273 0.339 0.265 0.233 0.221 0.242 0.253 0.309 0.24  0.267 0.274 0.262
+ 0.197 0.211 0.263 0.31  0.245 0.247 0.31  0.32  0.287 0.254 0.284 0.223
+ 0.259 0.19  0.215 0.178 0.239 0.22  0.325 0.264 0.278 0.262 0.304 0.267
+ 0.265 0.287 0.256 0.238 0.282 0.214 0.254 0.258 0.2   0.29  0.302 0.241
+ 0.23  0.23  0.241 0.204 0.286 0.257 0.309 0.218 0.237 0.278 0.266 0.332
+ 0.274 0.206 0.318 0.255 0.309 0.257 0.26  0.193 0.276 0.185 0.219 0.309
+ 0.244 0.276 0.32  0.225 0.234 0.27  0.249 0.314 0.253 0.226 0.265 0.269
+ 0.283 0.222 0.301 0.217]
+average mean metaepoch:0.26
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:10
+Softmax_vec: [0.002 0.005 0.01  0.009 0.015 0.003 0.007 0.007 0.002 0.006 0.003 0.008
+ 0.011 0.04  0.009 0.005 0.004 0.006 0.007 0.022 0.006 0.01  0.011 0.009
+ 0.002 0.003 0.009 0.022 0.006 0.006 0.022 0.027 0.014 0.007 0.013 0.004
+ 0.008 0.002 0.003 0.002 0.005 0.004 0.03  0.009 0.012 0.009 0.02  0.01
+ 0.009 0.014 0.008 0.005 0.013 0.003 0.007 0.008 0.002 0.015 0.019 0.006
+ 0.005 0.005 0.006 0.003 0.014 0.008 0.022 0.004 0.005 0.012 0.009 0.035
+ 0.011 0.003 0.026 0.007 0.022 0.008 0.008 0.002 0.012 0.002 0.004 0.022
+ 0.006 0.011 0.028 0.004 0.005 0.01  0.007 0.024 0.007 0.004 0.009 0.01
+ 0.013 0.004 0.019 0.004]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:10
+Best Offspring:77, with 0.36 accuracy and 0.07 std
+Time per metaepoch:1660.9s
+accuracy_list metaepoch 10: [0.222 0.361 0.239 0.254 0.221 0.293 0.259 0.323 0.266 0.321 0.259 0.213
+ 0.283 0.276 0.281 0.263 0.309 0.257 0.26  0.294 0.294 0.265 0.285 0.275
+ 0.301 0.231 0.296 0.303 0.29  0.293 0.32  0.271 0.267 0.3   0.252 0.227
+ 0.268 0.25  0.297 0.264 0.301 0.265 0.263 0.226 0.237 0.264 0.225 0.258
+ 0.295 0.301 0.288 0.179 0.246 0.297 0.314 0.206 0.314 0.297 0.238 0.276
+ 0.207 0.301 0.264 0.266 0.316 0.27  0.305 0.315 0.292 0.314 0.26  0.238
+ 0.258 0.248 0.187 0.277 0.254 0.364 0.295 0.222 0.261 0.256 0.245 0.275
+ 0.269 0.3   0.249 0.33  0.301 0.234 0.225 0.178 0.278 0.278 0.27  0.321
+ 0.314 0.213 0.274 0.276]
+average mean metaepoch:0.27
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:11
+Softmax_vec: [0.003 0.048 0.004 0.006 0.003 0.012 0.006 0.022 0.007 0.021 0.006 0.002
+ 0.01  0.009 0.01  0.007 0.017 0.006 0.006 0.012 0.012 0.007 0.01  0.009
+ 0.014 0.003 0.013 0.015 0.011 0.012 0.021 0.008 0.007 0.014 0.005 0.003
+ 0.007 0.005 0.013 0.007 0.014 0.007 0.007 0.003 0.004 0.007 0.003 0.006
+ 0.013 0.014 0.011 0.001 0.005 0.013 0.018 0.002 0.019 0.013 0.004 0.009
+ 0.002 0.014 0.007 0.007 0.019 0.008 0.015 0.019 0.012 0.019 0.006 0.004
+ 0.006 0.005 0.001 0.009 0.006 0.05  0.013 0.003 0.006 0.006 0.005 0.008
+ 0.008 0.014 0.005 0.026 0.014 0.004 0.003 0.001 0.009 0.009 0.008 0.022
+ 0.019 0.002 0.008 0.009]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:11
+Best Offspring:99, with 0.35 accuracy and 0.05 std
+Time per metaepoch:1603.1s
+accuracy_list metaepoch 11: [0.242 0.266 0.288 0.326 0.341 0.307 0.251 0.315 0.339 0.312 0.315 0.277
+ 0.243 0.315 0.242 0.223 0.261 0.275 0.243 0.271 0.267 0.258 0.275 0.322
+ 0.21  0.275 0.252 0.316 0.307 0.228 0.265 0.269 0.267 0.299 0.297 0.272
+ 0.243 0.325 0.26  0.297 0.316 0.304 0.325 0.259 0.328 0.297 0.294 0.267
+ 0.282 0.295 0.189 0.244 0.302 0.277 0.27  0.34  0.302 0.253 0.323 0.271
+ 0.305 0.258 0.265 0.289 0.241 0.242 0.313 0.21  0.273 0.256 0.286 0.18
+ 0.249 0.284 0.281 0.333 0.253 0.276 0.337 0.311 0.321 0.224 0.224 0.246
+ 0.304 0.299 0.276 0.236 0.198 0.296 0.277 0.269 0.28  0.324 0.252 0.279
+ 0.292 0.291 0.289 0.351]
+average mean metaepoch:0.28
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:12
+Softmax_vec: [0.004 0.006 0.01  0.021 0.028 0.014 0.005 0.016 0.027 0.016 0.016 0.008
+ 0.004 0.017 0.004 0.003 0.006 0.007 0.004 0.007 0.006 0.005 0.007 0.019
+ 0.002 0.007 0.005 0.017 0.014 0.003 0.006 0.007 0.006 0.012 0.011 0.007
+ 0.004 0.02  0.005 0.012 0.017 0.013 0.02  0.005 0.021 0.012 0.011 0.006
+ 0.008 0.011 0.001 0.004 0.013 0.008 0.007 0.027 0.013 0.005 0.019 0.007
+ 0.013 0.005 0.006 0.01  0.004 0.004 0.016 0.002 0.007 0.005 0.009 0.001
+ 0.004 0.009 0.008 0.024 0.005 0.008 0.026 0.015 0.018 0.003 0.003 0.004
+ 0.013 0.012 0.008 0.003 0.002 0.011 0.008 0.007 0.008 0.02  0.005 0.008
+ 0.01  0.01  0.01  0.034]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:12
+Best Offspring:52, with 0.38 accuracy and 0.08 std
+Time per metaepoch:1587.3s
+accuracy_list metaepoch 12: [0.275 0.304 0.255 0.293 0.273 0.268 0.177 0.364 0.264 0.206 0.318 0.312
+ 0.328 0.318 0.327 0.342 0.335 0.316 0.315 0.258 0.297 0.358 0.346 0.287
+ 0.246 0.336 0.27  0.265 0.317 0.279 0.343 0.291 0.289 0.311 0.28  0.271
+ 0.245 0.267 0.33  0.284 0.279 0.284 0.317 0.33  0.369 0.3   0.247 0.279
+ 0.264 0.285 0.22  0.238 0.385 0.308 0.37  0.282 0.269 0.316 0.376 0.311
+ 0.282 0.282 0.278 0.328 0.235 0.323 0.248 0.246 0.19  0.286 0.225 0.306
+ 0.301 0.285 0.269 0.265 0.281 0.246 0.274 0.322 0.224 0.315 0.272 0.287
+ 0.314 0.303 0.3   0.283 0.347 0.309 0.298 0.306 0.334 0.294 0.303 0.316
+ 0.304 0.319 0.289 0.315]
+average mean metaepoch:0.29
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:13
+Softmax_vec: [0.005 0.01  0.004 0.008 0.005 0.005 0.001 0.031 0.004 0.001 0.013 0.011
+ 0.015 0.012 0.015 0.02  0.017 0.012 0.012 0.004 0.008 0.028 0.022 0.007
+ 0.003 0.018 0.005 0.004 0.012 0.006 0.021 0.007 0.007 0.011 0.006 0.005
+ 0.003 0.004 0.016 0.006 0.006 0.006 0.012 0.016 0.034 0.009 0.003 0.006
+ 0.004 0.006 0.002 0.003 0.047 0.01  0.035 0.006 0.005 0.012 0.039 0.011
+ 0.006 0.006 0.006 0.015 0.002 0.014 0.003 0.003 0.001 0.007 0.002 0.01
+ 0.009 0.006 0.005 0.004 0.006 0.003 0.005 0.014 0.002 0.012 0.005 0.007
+ 0.011 0.009 0.009 0.006 0.022 0.01  0.008 0.01  0.017 0.008 0.009 0.012
+ 0.009 0.013 0.007 0.012]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:13
+Best Offspring:61, with 0.45 accuracy and 0.10 std
+Time per metaepoch:1582.1s
+accuracy_list metaepoch 13: [0.344 0.309 0.301 0.329 0.253 0.298 0.323 0.304 0.347 0.326 0.308 0.344
+ 0.314 0.334 0.298 0.388 0.312 0.415 0.378 0.328 0.331 0.331 0.293 0.354
+ 0.313 0.364 0.38  0.362 0.305 0.339 0.335 0.312 0.352 0.386 0.373 0.371
+ 0.32  0.35  0.339 0.371 0.436 0.305 0.361 0.363 0.262 0.26  0.373 0.432
+ 0.333 0.279 0.314 0.353 0.393 0.299 0.414 0.275 0.335 0.345 0.329 0.28
+ 0.359 0.446 0.352 0.343 0.356 0.364 0.298 0.335 0.325 0.302 0.334 0.319
+ 0.287 0.317 0.366 0.313 0.349 0.256 0.294 0.318 0.333 0.394 0.311 0.302
+ 0.311 0.324 0.285 0.277 0.401 0.304 0.272 0.351 0.295 0.353 0.339 0.29
+ 0.327 0.344 0.354 0.345]
+average mean metaepoch:0.33
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:14
+Softmax_vec: [0.009 0.004 0.004 0.007 0.001 0.004 0.006 0.004 0.009 0.006 0.004 0.009
+ 0.005 0.007 0.003 0.021 0.005 0.037 0.017 0.006 0.007 0.007 0.003 0.011
+ 0.005 0.013 0.018 0.013 0.004 0.008 0.007 0.005 0.01  0.021 0.016 0.015
+ 0.005 0.01  0.008 0.015 0.055 0.004 0.012 0.013 0.002 0.002 0.016 0.051
+ 0.007 0.002 0.005 0.011 0.023 0.004 0.036 0.002 0.007 0.009 0.007 0.002
+ 0.012 0.067 0.01  0.009 0.011 0.013 0.003 0.007 0.006 0.004 0.007 0.005
+ 0.003 0.005 0.014 0.005 0.01  0.002 0.003 0.005 0.007 0.024 0.005 0.004
+ 0.005 0.006 0.003 0.002 0.027 0.004 0.002 0.01  0.003 0.011 0.008 0.003
+ 0.006 0.009 0.011 0.009]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:14
+Best Offspring:32, with 0.44 accuracy and 0.06 std
+Time per metaepoch:1579.6s
+accuracy_list metaepoch 14: [0.376 0.36  0.349 0.439 0.362 0.418 0.378 0.334 0.363 0.417 0.42  0.433
+ 0.422 0.427 0.339 0.307 0.339 0.351 0.349 0.342 0.357 0.315 0.329 0.3
+ 0.294 0.405 0.436 0.389 0.34  0.343 0.414 0.336 0.444 0.317 0.334 0.418
+ 0.301 0.372 0.367 0.32  0.337 0.418 0.359 0.373 0.335 0.409 0.358 0.364
+ 0.37  0.39  0.375 0.368 0.306 0.377 0.352 0.364 0.396 0.334 0.435 0.352
+ 0.292 0.338 0.337 0.377 0.311 0.371 0.371 0.35  0.36  0.26  0.285 0.344
+ 0.317 0.371 0.395 0.29  0.28  0.349 0.303 0.387 0.281 0.373 0.366 0.399
+ 0.324 0.366 0.395 0.404 0.386 0.346 0.321 0.308 0.411 0.425 0.361 0.36
+ 0.375 0.322 0.433 0.42 ]
+average mean metaepoch:0.36
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:15
+Softmax_vec: [0.01  0.007 0.006 0.034 0.007 0.022 0.01  0.004 0.007 0.022 0.023 0.03
+ 0.024 0.027 0.005 0.002 0.005 0.006 0.006 0.005 0.007 0.003 0.004 0.002
+ 0.002 0.017 0.032 0.013 0.005 0.005 0.021 0.004 0.038 0.003 0.004 0.023
+ 0.002 0.009 0.008 0.003 0.004 0.022 0.007 0.009 0.004 0.019 0.007 0.008
+ 0.009 0.013 0.01  0.008 0.002 0.01  0.006 0.008 0.014 0.004 0.032 0.006
+ 0.002 0.005 0.004 0.01  0.003 0.009 0.009 0.006 0.007 0.001 0.002 0.005
+ 0.003 0.009 0.014 0.002 0.001 0.006 0.002 0.012 0.001 0.009 0.008 0.015
+ 0.003 0.008 0.014 0.017 0.012 0.005 0.003 0.002 0.019 0.025 0.007 0.007
+ 0.009 0.003 0.03  0.023]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:15
+Best Offspring:66, with 0.50 accuracy and 0.09 std
+Time per metaepoch:1577.0s
+accuracy_list metaepoch 15: [0.409 0.356 0.345 0.429 0.378 0.469 0.381 0.398 0.476 0.413 0.309 0.351
+ 0.325 0.399 0.453 0.424 0.438 0.443 0.426 0.382 0.366 0.374 0.385 0.359
+ 0.415 0.382 0.384 0.421 0.406 0.349 0.406 0.343 0.373 0.326 0.388 0.334
+ 0.381 0.392 0.38  0.311 0.418 0.392 0.415 0.439 0.388 0.357 0.366 0.394
+ 0.438 0.382 0.424 0.386 0.444 0.308 0.322 0.351 0.401 0.398 0.361 0.345
+ 0.381 0.391 0.438 0.352 0.387 0.409 0.5   0.339 0.425 0.338 0.474 0.349
+ 0.378 0.453 0.313 0.389 0.362 0.36  0.444 0.439 0.414 0.425 0.368 0.432
+ 0.384 0.355 0.388 0.408 0.348 0.406 0.317 0.327 0.317 0.333 0.284 0.496
+ 0.345 0.375 0.33  0.421]
+average mean metaepoch:0.39
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:16
+Softmax_vec: [0.011 0.004 0.003 0.016 0.006 0.035 0.006 0.008 0.04  0.011 0.001 0.003
+ 0.002 0.009 0.026 0.014 0.019 0.021 0.015 0.006 0.004 0.005 0.007 0.004
+ 0.012 0.006 0.006 0.014 0.01  0.003 0.01  0.003 0.005 0.002 0.007 0.002
+ 0.006 0.008 0.006 0.001 0.013 0.008 0.012 0.019 0.007 0.004 0.004 0.008
+ 0.019 0.006 0.014 0.007 0.022 0.001 0.002 0.003 0.009 0.009 0.004 0.003
+ 0.006 0.007 0.019 0.003 0.007 0.011 0.065 0.003 0.014 0.003 0.039 0.003
+ 0.006 0.026 0.002 0.007 0.004 0.004 0.021 0.019 0.012 0.015 0.005 0.017
+ 0.006 0.004 0.007 0.01  0.003 0.01  0.002 0.002 0.002 0.002 0.001 0.06
+ 0.003 0.005 0.002 0.013]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:16
+Best Offspring:1, with 0.50 accuracy and 0.06 std
+Time per metaepoch:1577.9s
+accuracy_list metaepoch 16: [0.477 0.498 0.438 0.385 0.372 0.486 0.462 0.397 0.413 0.496 0.368 0.407
+ 0.452 0.364 0.439 0.469 0.417 0.449 0.444 0.348 0.436 0.354 0.408 0.44
+ 0.42  0.419 0.439 0.436 0.44  0.364 0.373 0.455 0.374 0.481 0.443 0.385
+ 0.328 0.479 0.387 0.407 0.325 0.444 0.387 0.456 0.405 0.406 0.466 0.458
+ 0.412 0.382 0.367 0.438 0.431 0.464 0.448 0.447 0.411 0.431 0.408 0.438
+ 0.448 0.458 0.423 0.401 0.419 0.403 0.429 0.41  0.415 0.495 0.366 0.355
+ 0.42  0.415 0.379 0.474 0.444 0.467 0.47  0.414 0.441 0.486 0.435 0.435
+ 0.38  0.356 0.466 0.366 0.461 0.429 0.439 0.331 0.435 0.485 0.417 0.463
+ 0.411 0.405 0.36  0.418]
+average mean metaepoch:0.42
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]
+ [0.498 0.063]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:17
+Softmax_vec: [0.023 0.034 0.01  0.004 0.003 0.027 0.017 0.005 0.006 0.033 0.003 0.006
+ 0.014 0.002 0.011 0.019 0.007 0.013 0.012 0.002 0.01  0.002 0.006 0.011
+ 0.007 0.007 0.011 0.01  0.011 0.002 0.003 0.014 0.003 0.025 0.011 0.004
+ 0.001 0.023 0.004 0.005 0.001 0.012 0.004 0.015 0.005 0.005 0.018 0.015
+ 0.006 0.003 0.003 0.01  0.009 0.017 0.013 0.012 0.006 0.009 0.006 0.01
+ 0.013 0.015 0.008 0.005 0.007 0.005 0.009 0.006 0.007 0.032 0.002 0.002
+ 0.007 0.006 0.003 0.021 0.012 0.018 0.019 0.006 0.011 0.027 0.01  0.01
+ 0.003 0.002 0.018 0.002 0.016 0.009 0.011 0.001 0.01  0.027 0.007 0.017
+ 0.006 0.005 0.002 0.007]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:17
+Best Offspring:77, with 0.56 accuracy and 0.07 std
+Time per metaepoch:1567.6s
+accuracy_list metaepoch 17: [0.399 0.473 0.485 0.45  0.461 0.47  0.463 0.429 0.353 0.488 0.463 0.407
+ 0.42  0.463 0.483 0.454 0.498 0.428 0.398 0.405 0.435 0.443 0.438 0.421
+ 0.334 0.489 0.446 0.411 0.403 0.463 0.489 0.457 0.424 0.452 0.478 0.442
+ 0.432 0.435 0.497 0.467 0.471 0.478 0.466 0.452 0.467 0.482 0.435 0.45
+ 0.477 0.478 0.445 0.483 0.446 0.478 0.479 0.47  0.419 0.454 0.446 0.394
+ 0.504 0.477 0.492 0.415 0.408 0.374 0.495 0.521 0.498 0.432 0.471 0.474
+ 0.416 0.509 0.44  0.421 0.455 0.558 0.454 0.457 0.391 0.476 0.511 0.444
+ 0.393 0.439 0.467 0.476 0.408 0.485 0.459 0.406 0.498 0.383 0.439 0.506
+ 0.471 0.466 0.461 0.47 ]
+average mean metaepoch:0.45
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]
+ [0.498 0.063]
+ [0.558 0.07 ]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:18
+Softmax_vec: [0.003 0.012 0.015 0.007 0.009 0.011 0.01  0.005 0.001 0.016 0.01  0.003
+ 0.004 0.01  0.014 0.008 0.019 0.005 0.003 0.003 0.005 0.006 0.006 0.004
+ 0.001 0.016 0.007 0.003 0.003 0.01  0.016 0.008 0.004 0.008 0.013 0.006
+ 0.005 0.005 0.019 0.01  0.011 0.013 0.01  0.008 0.01  0.014 0.006 0.007
+ 0.013 0.013 0.007 0.014 0.007 0.013 0.013 0.011 0.004 0.008 0.007 0.002
+ 0.022 0.013 0.017 0.004 0.003 0.002 0.018 0.031 0.019 0.005 0.011 0.012
+ 0.004 0.024 0.006 0.004 0.008 0.064 0.008 0.009 0.002 0.012 0.025 0.007
+ 0.002 0.006 0.01  0.013 0.003 0.015 0.009 0.003 0.019 0.002 0.006 0.023
+ 0.011 0.01  0.009 0.011]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:18
+Best Offspring:9, with 0.57 accuracy and 0.07 std
+Time per metaepoch:1566.3s
+accuracy_list metaepoch 18: [0.468 0.541 0.433 0.556 0.505 0.471 0.406 0.495 0.496 0.569 0.462 0.52
+ 0.539 0.469 0.49  0.52  0.448 0.51  0.478 0.489 0.493 0.481 0.427 0.457
+ 0.494 0.459 0.481 0.453 0.493 0.511 0.52  0.479 0.524 0.522 0.512 0.49
+ 0.426 0.472 0.424 0.506 0.497 0.483 0.344 0.435 0.491 0.5   0.448 0.495
+ 0.472 0.449 0.453 0.515 0.465 0.444 0.446 0.475 0.482 0.395 0.505 0.446
+ 0.503 0.512 0.492 0.471 0.495 0.458 0.492 0.468 0.504 0.492 0.506 0.499
+ 0.518 0.476 0.462 0.525 0.489 0.554 0.566 0.421 0.493 0.45  0.505 0.467
+ 0.495 0.47  0.44  0.497 0.464 0.505 0.454 0.44  0.472 0.496 0.525 0.47
+ 0.527 0.496 0.494 0.417]
+average mean metaepoch:0.48
+average std metaepoch:0.04
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]
+ [0.498 0.063]
+ [0.558 0.07 ]
+ [0.569 0.072]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:19
+Softmax_vec: [0.006 0.026 0.003 0.034 0.012 0.006 0.002 0.01  0.01  0.044 0.005 0.017
+ 0.025 0.006 0.009 0.017 0.004 0.014 0.007 0.009 0.01  0.008 0.003 0.005
+ 0.01  0.005 0.008 0.004 0.01  0.014 0.017 0.007 0.018 0.017 0.014 0.009
+ 0.003 0.006 0.002 0.013 0.011 0.008 0.    0.003 0.009 0.011 0.004 0.01
+ 0.006 0.004 0.004 0.015 0.006 0.004 0.004 0.007 0.008 0.001 0.012 0.004
+ 0.012 0.014 0.01  0.006 0.01  0.005 0.009 0.006 0.012 0.01  0.013 0.011
+ 0.016 0.007 0.005 0.018 0.009 0.033 0.042 0.002 0.01  0.004 0.012 0.006
+ 0.01  0.006 0.003 0.01  0.005 0.012 0.004 0.003 0.006 0.01  0.018 0.006
+ 0.019 0.01  0.01  0.002]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:19
+Best Offspring:55, with 0.56 accuracy and 0.07 std
+Time per metaepoch:1572.7s
+accuracy_list metaepoch 19: [0.533 0.466 0.472 0.43  0.542 0.491 0.527 0.475 0.485 0.498 0.5   0.533
+ 0.549 0.526 0.543 0.502 0.543 0.462 0.439 0.528 0.533 0.459 0.543 0.507
+ 0.497 0.499 0.442 0.506 0.563 0.525 0.521 0.507 0.505 0.523 0.428 0.506
+ 0.51  0.485 0.421 0.531 0.493 0.553 0.508 0.504 0.539 0.506 0.505 0.429
+ 0.533 0.435 0.502 0.489 0.528 0.522 0.46  0.565 0.408 0.543 0.503 0.494
+ 0.494 0.529 0.492 0.537 0.505 0.456 0.535 0.548 0.461 0.514 0.525 0.486
+ 0.495 0.509 0.508 0.522 0.564 0.521 0.502 0.517 0.523 0.518 0.47  0.515
+ 0.507 0.503 0.53  0.537 0.525 0.501 0.484 0.553 0.51  0.516 0.491 0.505
+ 0.519 0.538 0.485 0.535]
+average mean metaepoch:0.51
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]
+ [0.498 0.063]
+ [0.558 0.07 ]
+ [0.569 0.072]
+ [0.565 0.075]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:20
+Softmax_vec: [0.015 0.004 0.004 0.002 0.017 0.006 0.013 0.004 0.006 0.007 0.007 0.014
+ 0.02  0.013 0.017 0.008 0.018 0.003 0.002 0.013 0.014 0.003 0.018 0.009
+ 0.007 0.007 0.002 0.008 0.026 0.012 0.011 0.008 0.008 0.012 0.002 0.008
+ 0.009 0.005 0.002 0.014 0.007 0.022 0.009 0.008 0.016 0.008 0.008 0.002
+ 0.015 0.002 0.008 0.006 0.013 0.011 0.003 0.027 0.001 0.018 0.008 0.007
+ 0.007 0.013 0.006 0.016 0.008 0.003 0.015 0.02  0.003 0.01  0.012 0.006
+ 0.007 0.009 0.009 0.012 0.027 0.011 0.008 0.01  0.012 0.011 0.004 0.01
+ 0.009 0.008 0.014 0.015 0.012 0.008 0.005 0.022 0.009 0.01  0.006 0.008
+ 0.011 0.016 0.006 0.015]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:20
+Best Offspring:31, with 0.57 accuracy and 0.07 std
+Time per metaepoch:1573.3s
+accuracy_list metaepoch 20: [0.551 0.548 0.476 0.513 0.502 0.554 0.527 0.524 0.494 0.524 0.495 0.539
+ 0.516 0.52  0.525 0.554 0.529 0.522 0.514 0.507 0.516 0.5   0.543 0.518
+ 0.53  0.511 0.524 0.562 0.533 0.554 0.508 0.573 0.547 0.506 0.503 0.52
+ 0.545 0.546 0.484 0.512 0.548 0.539 0.534 0.433 0.542 0.488 0.564 0.421
+ 0.513 0.516 0.502 0.527 0.555 0.488 0.515 0.53  0.555 0.55  0.535 0.553
+ 0.534 0.547 0.504 0.524 0.546 0.57  0.554 0.516 0.505 0.55  0.498 0.536
+ 0.528 0.536 0.518 0.53  0.476 0.481 0.5   0.547 0.521 0.541 0.494 0.519
+ 0.522 0.554 0.516 0.529 0.52  0.542 0.481 0.52  0.494 0.532 0.498 0.539
+ 0.521 0.506 0.538 0.495]
+average mean metaepoch:0.52
+average std metaepoch:0.03
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]
+ [0.498 0.063]
+ [0.558 0.07 ]
+ [0.569 0.072]
+ [0.565 0.075]
+ [0.573 0.07 ]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:21
+Softmax_vec: [0.016 0.015 0.004 0.007 0.006 0.017 0.01  0.009 0.005 0.009 0.005 0.012
+ 0.008 0.008 0.009 0.017 0.01  0.009 0.007 0.007 0.008 0.006 0.013 0.008
+ 0.01  0.007 0.009 0.02  0.011 0.017 0.007 0.025 0.015 0.006 0.006 0.008
+ 0.014 0.014 0.004 0.007 0.015 0.012 0.011 0.001 0.013 0.004 0.02  0.001
+ 0.007 0.008 0.006 0.01  0.017 0.004 0.008 0.01  0.017 0.015 0.011 0.016
+ 0.011 0.015 0.006 0.009 0.014 0.023 0.017 0.008 0.006 0.015 0.005 0.012
+ 0.01  0.012 0.008 0.01  0.003 0.004 0.006 0.014 0.009 0.013 0.005 0.008
+ 0.009 0.017 0.008 0.01  0.009 0.013 0.004 0.008 0.005 0.011 0.005 0.012
+ 0.009 0.006 0.012 0.005]
+
+/usr/local/lib/python3.7/dist-packages/ipykernel_launcher.py:112: VisibleDeprecationWarning: Creating an ndarray from ragged nested sequences (which is a list-or-tuple of lists-or-tuples-or ndarrays with different lengths or shapes) is deprecated. If you meant to do this, you must specify 'dtype=object' when creating the ndarray.
+
+Metaepoch:21
+Best Offspring:67, with 0.59 accuracy and 0.05 std
+Time per metaepoch:1584.3s
+accuracy_list metaepoch 21: [0.572 0.514 0.5   0.533 0.541 0.542 0.535 0.514 0.529 0.557 0.568 0.568
+ 0.502 0.548 0.511 0.547 0.509 0.54  0.566 0.55  0.545 0.55  0.559 0.523
+ 0.528 0.538 0.482 0.558 0.502 0.502 0.528 0.542 0.545 0.569 0.524 0.548
+ 0.508 0.558 0.524 0.547 0.53  0.541 0.57  0.565 0.504 0.523 0.575 0.551
+ 0.55  0.521 0.563 0.56  0.577 0.521 0.544 0.528 0.562 0.572 0.547 0.539
+ 0.546 0.54  0.537 0.577 0.562 0.548 0.542 0.589 0.536 0.533 0.543 0.564
+ 0.54  0.515 0.519 0.51  0.523 0.558 0.57  0.532 0.551 0.539 0.543 0.5
+ 0.506 0.526 0.54  0.533 0.497 0.501 0.552 0.577 0.529 0.548 0.537 0.525
+ 0.554 0.57  0.532 0.522]
+average mean metaepoch:0.54
+average std metaepoch:0.02
+
+
+Development best performer: [[0.248 0.061]
+ [0.229 0.067]
+ [0.273 0.061]
+ [0.268 0.107]
+ [0.289 0.089]
+ [0.326 0.073]
+ [0.286 0.089]
+ [0.333 0.049]
+ [0.309 0.059]
+ [0.339 0.052]
+ [0.364 0.07 ]
+ [0.351 0.046]
+ [0.385 0.077]
+ [0.446 0.096]
+ [0.444 0.065]
+ [0.5   0.085]
+ [0.498 0.063]
+ [0.558 0.07 ]
+ [0.569 0.072]
+ [0.565 0.075]
+ [0.573 0.07 ]
+ [0.589 0.055]]
+<module 'matplotlib.pyplot' from '/usr/local/lib/python3.7/dist-packages/matplotlib/pyplot.py'>
+Metaepoch:22
+Softmax_vec: [0.018 0.006 0.004 0.008 0.009 0.01  0.008 0.005 0.007 0.013 0.016 0.016
+ 0.004 0.011 0.005 0.011 0.005 0.009 0.015 0.011 0.01  0.011 0.013 0.007
+ 0.007 0.009 0.003 0.013 0.004 0.004 0.007 0.01  0.01  0.017 0.007 0.011
+ 0.005 0.013 0.007 0.011 0.008 0.009 0.017 0.015 0.005 0.007 0.019 0.011
+ 0.011 0.006 0.015 0.014 0.019 0.006 0.01  0.007 0.014 0.017 0.011 0.009
+ 0.01  0.009 0.009 0.019 0.014 0.011 0.01  0.025 0.009 0.008 0.01  0.015
+ 0.009 0.006 0.006 0.005 0.007 0.013 0.017 0.008 0.011 0.009 0.01  0.004
+ 0.005 0.007 0.009 0.008 0.004 0.004 0.012 0.019 0.007 0.011 0.009 0.007
+ 0.012 0.017 0.008 0.006]
