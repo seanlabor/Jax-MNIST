@@ -20,6 +20,7 @@ from jax import jit, vmap, pmap, grad, value_and_grad
 import random
 from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
+from sty import bg
 from jax.example_libraries import stax, optimizers
 import torchvision
 import torch
@@ -28,10 +29,14 @@ import torch.utils.data as data_utils
 import time
 from jax.example_libraries import stax
 from jax.example_libraries.stax import Dense, Relu, LogSoftmax
-
+from sklearn.model_selection import train_test_split
 from jax import random
 
-"""# **Funktions**"""
+"""### Variables
+Most variables overriden in main code part!!!
+"""
+
+#Needs Cleaning
 
 '''Set your file directorys'''
 
@@ -63,14 +68,14 @@ log_interval = 10
 std_modifier=0.05
 
 
-# !!! ATM Overriden in main code part
+
 '''number of offsprings per metaepoch'''
 n_offsprings=100
 '''number of metaopochs'''
 n_metaepochs=10
 
 
-NNin1=8112 #dependent on Convu
+NNin1=2500 #dependent on Convu
 NNout1=10
 
 
@@ -120,6 +125,8 @@ n_offsp_epoch = 2
 n_testing_epochs = 5
 n_metaepochs=10
 
+"""## **Funktions**"""
+
 train_dataset = MNIST(root='train_mnist', train=True, download=True,transform=torchvision.transforms.Compose([
                                             torchvision.transforms.ToTensor(),
                                             torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
@@ -128,13 +135,11 @@ test_dataset = MNIST(root='test_mnist', train=False, download=True,transform=tor
                                             torchvision.transforms.ToTensor(),
                                             torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
 
-train_images = jnp.array(train_dataset.data,dtype="float32").reshape(len(train_dataset), -1)
-train_lbls = jnp.array(train_dataset.targets)
+x = np.concatenate((train_dataset.data,test_dataset.data))
+y= np.concatenate((train_dataset.targets,test_dataset.targets))
 
-test_images = jnp.array(test_dataset.data,dtype="float32").reshape(len(test_dataset), -1)
-test_lbls = jnp.array(test_dataset.targets)
-
-
+x = jnp.array(x,dtype="float32").reshape(len(x), -1)
+y = jnp.array(y)
 
 def init_MLP(layer_widths, parent_key, scale=0.01):
 
@@ -149,85 +154,6 @@ def init_MLP(layer_widths, parent_key, scale=0.01):
                        ]
         )
     return params
-
-# test
-#key = jax.random.PRNGKey(seed)
-#MLP_params = init_MLP([NNin1, 10], key)
-#print(jax.tree_map(lambda x: x.shape, MLP_params))
-
-
-
-Convu1_in=16
-Convu2_in=24
-Convu3_in=4
-
-conv_init, conv_apply = stax.serial(
-    stax.Conv(Convu1_in,(3,3), padding="SAME"),
-    stax.BatchNorm(),
-    stax.Relu,
-    stax.MaxPool((2,2)),
-    stax.Conv(Convu2_in, (3,3), padding="SAME"),
-    stax.BatchNorm(),
-    stax.Relu,
-    stax.MaxPool((2,2)),
-    stax.Conv(Convu3_in, (3,3), padding="SAME"),
-    stax.Relu,
-    stax.MaxPool((2,2))
-)
-
-#test better performer 1
-conv_init, conv_apply = stax.serial(
-    stax.Conv(Convu1_in,(3,3), strides=(1,1),padding="SAME"),
-    stax.BatchNorm(),
-    stax.Relu,
-    stax.MaxPool((2,2)),
-    stax.Conv(Convu2_in, (3,3), strides=(1,1),padding="SAME"),
-    stax.BatchNorm(),
-    stax.Relu,
-    stax.MaxPool((2,2)),
-    
-)
-
-Convu1_in=12
-Convu2_in=24
-#test better performer 2, good performance
-conv_init, conv_apply = stax.serial(
-    stax.Conv(Convu1_in,(3,3), strides=(1,1),padding="SAME"),
-    stax.BatchNorm(),
-    stax.Relu,
-    stax.MaxPool((2,2)),
-    stax.Conv(Convu2_in, (3,3), strides=(1,1),padding="SAME"),
-    stax.BatchNorm(),
-    stax.Relu,
-    stax.MaxPool((2,2)),
-   
-)
-
-'''Robert lange'''
-conv_init, conv_apply = stax.serial(stax.Conv(12, (5, 5), (1, 1), padding="SAME"),
-                                 stax.BatchNorm(), stax.Relu,
-                                 stax.Conv(24, (5, 5), (1, 1), padding="SAME"),
-                                 stax.BatchNorm(), stax.Relu,
-                                 stax.Conv(24, (3, 3), (1, 1), padding="SAME"),
-                                 stax.BatchNorm(), stax.Relu,
-                                 stax.Conv(10, (3, 3), (1, 1), padding="SAME"), stax.BatchNorm(),stax.Relu
-                                 )
-
-'''Test if convu out and NN in matches'''
-NNin1=2500
-rng=jax.random.PRNGKey(1)
-
-father_weights = conv_init(rng, (batch_size,28,28,1))
-father_weights = father_weights[1]
-
-
-train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-testaffe=train_img_off[0:5]
-imgs = conv_apply(father_weights, testaffe.reshape(-1,28,28,1))
-
-MLP_params = init_MLP([NNin1, 10], rng)
-
-pred_classes = jnp.argmax(jit_batched_MLP_predict(MLP_params, imgs.reshape(-1,NNin1)), axis=1)
 
 @jit
 def MLP_predict(params, x):
@@ -247,9 +173,43 @@ jit_MLP_predict=jit(MLP_predict)
 
 @jit
 def batched_MLP_predict(params,x):
-  return vmap(jit_MLP_predict, ( None, 0))(params,x)
+  return vmap(jit_MLP_predict, (None, 0))(params,x)
   
 jit_batched_MLP_predict=jit(batched_MLP_predict)
+
+Convu1_in=16
+Convu2_in=24
+Convu3_in=1
+
+conv_init, conv_apply = stax.serial(
+    stax.Conv(Convu1_in,(3,3), padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    stax.Conv(Convu2_in, (3,3), padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    stax.Conv(Convu3_in, (3,3), padding="SAME"),
+    stax.Relu,
+    stax.MaxPool((2,2))
+)
+
+'''After changing Convu structure test if convu out and NN in matches, set NNin1=25*25*4 to corresponding shape in error (5, 25, 25, 4) '''
+NNin1=625
+rng=jax.random.PRNGKey(1)
+
+father_weights = conv_init(rng, (batch_size,28,28,1))
+father_weights = father_weights[1]
+
+
+x_train=x[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+testaffe=x_train[0:5]
+imgs = conv_apply(father_weights, testaffe.reshape(-1,28,28,1))
+
+MLP_params = init_MLP([NNin1, 10], rng)
+
+pred_classes = jnp.argmax(jit_batched_MLP_predict(MLP_params, imgs.reshape(-1,NNin1)), axis=1)
 
 @jit
 def loss_fn(params, imgs, gt_lbls):
@@ -257,7 +217,8 @@ def loss_fn(params, imgs, gt_lbls):
     predictions = jit_batched_MLP_predict(params, imgs)
     #print("predictions",predictions.shape)
     return -jnp.mean(predictions * gt_lbls)
-
+    
+jit_loss_fn=jit(loss_fn)
 
 @jit
 def update(params, imgs, gt_lbls, lr=0.01):
@@ -280,12 +241,12 @@ jit_accuracy=jit(accuracy)
 '''For loop is neccesary to do batch training. Every update iteration needs to run with updated MPL params'''
 @jit
 def train(conv_weights, imgs, lbls,MLP_params ):
-  
-  for i in range(jnp.shape(imgs)[0]):
+  for n in range(n_training_epochs):  
+    for i in range(jnp.shape(imgs)[0]):
 
-    gt_labels = jax.nn.one_hot(lbls[i], 10)
-    img_conv = conv_apply(conv_weights, imgs[i].reshape(-1,28,28,1))
-    loss, MLP_params = jit_update(MLP_params, img_conv.reshape(-1,NNin1), gt_labels)
+      gt_labels = jax.nn.one_hot(lbls[i], 10)
+      img_conv = conv_apply(conv_weights, imgs[i].reshape(-1,28,28,1))
+      loss, MLP_params = jit_update(MLP_params, img_conv.reshape(-1,NNin1), gt_labels)
 
   return MLP_params
   
@@ -297,8 +258,8 @@ Every loop is trained with n_samples/batch_size * batch size training epochs.
 Everything put in jit and vmap to speed up
 
 Input  
-(10, 6, 25, 28, 28, 1) train_img_off
-(10, 6, 25) train_lbl_off
+(10, 6, 25, 28, 28, 1) x_train
+(10, 6, 25) y_train
 (10, 1000, 28, 28, 1) test_img_off
 (10, 1000) test_lbl_off
           
@@ -326,8 +287,6 @@ def vmap_bootstrapp_offspring_MLP(key, conv_weights, batch_affe, labelaffe,test_
   
 jit_vmap_bootstrapp_offspring_MLP=jit(vmap_bootstrapp_offspring_MLP)
 
-
-
 '''creating offsprings Approach 2'''
 def create_offsprings(n_offspr, fath_weights,std_modifier):
   statedic_list=[]
@@ -345,7 +304,7 @@ def create_offsprings(n_offspr, fath_weights,std_modifier):
             else:
               seed=np.random.randint(0,100000)
               key = random.PRNGKey(seed)
-              x_w = w+random.normal(key,shape=w.shape)*std_modifier
+              x_w = w+random.normal(key,shape=w.shape)*std_modifier #tested, random.normal adding different random noise value to every single weight
               x_b = b+random.normal(key,shape=b.shape)*std_modifier
             dicta[idx]=(x_w,x_b)
     
@@ -354,26 +313,13 @@ def create_offsprings(n_offspr, fath_weights,std_modifier):
 
 '''softmax for offspring list for approach 2'''
 def softmax_offlist(off_list,acc_list,temp):
-  temp_list=softmax_result(acc_list,temp)
+  softmax_list=softmax_result(acc_list,temp)
   for i in range(len(off_list)):
     if i==0:
-      top_dog=jax.tree_map(lambda x: x*temp_list[i], off_list[i])
+      top_dog=jax.tree_map(lambda x: x*softmax_list[i], off_list[i])
     else:
-      general_dog = jax.tree_map(lambda x: x*temp_list[i], off_list[i])
+      general_dog = jax.tree_map(lambda x: x*softmax_list[i], off_list[i])
       top_dog=jax.tree_map(lambda x,y: x+y, top_dog,general_dog)
-  return top_dog
-
-'''softmax from keylist for approach 1'''
-def softmax_conv_weights(father_weights,keylist, acc_list,temp):
-  temp_list=softmax(acc_list,temp)
-  for k in range(len(keylist)):
-        if k==0:
-          top_dog = father_weights
-          top_dog=jax.tree_map(lambda x: x*temp_list[k], top_dog)
-        else:
-          rng_soft = jax.random.PRNGKey(k)
-          general_dog = conv_init(rng_soft, (batch_size,28,28,1))[1]
-          top_dog=jax.tree_map(lambda x,y: x+y*std_modifier*temp_list[k], top_dog,general_dog)
   return top_dog
 
 '''Creates softmax/temp list out of accuracy list [0.2,0.3,....,0.8]'''
@@ -387,27 +333,31 @@ def sigma_decay(start, end, n_iter):
   return(end/start)**(1/n_iter)
 
 '''Initialize Variables'''
+import _pickle as cPickle
 
-n_samples = 150
+n_training_epochs=10 #= how many times, is the MLP trained with the same data. Reduces dependance on the initialization of MLP weights
+
+n_samples = 100 #n of training independent training samples for MLP, samples are stratified
 batch_size = 25
-n_offsp_epoch=10
-n_metaepochs=2000
+n_test=500
+n_offsp_epoch=10 #Bootstrapping, delivers more stable results for every offspring
 
-n_offsprings=250
 '''keys'''
 starting_key=48 #define starting point
-MLP_key=685
+MLP_key=685 #seed 
 
-use_sigma_decay=False #otherwise using constant sigma from config tab
+use_sigma_decay=True #otherwise using constant sigma from config tab
+n_decay_epochs=500   # over how many metaepochs sigma is decayed
 sigma_start=1 
 sigma_goal=0.05 #sigma goal after n_metaepochs
 
-create_offsprings_bool=True
-use_father=True
-std_modifier=0.05
-temp=0.05 #weight for softmax
+use_pickle=True #load weights
+use_father=True 
+std_modifier=0.01
+temp=0.02 #weight for softmax
 
-
+n_metaepochs=1000
+n_offsprings=250
 
 # Commented out IPython magic to ensure Python compatibility.
 # #main code
@@ -418,76 +368,125 @@ temp=0.05 #weight for softmax
 # for meta in range (n_metaepochs):
 # 
 #     if use_sigma_decay:
-#         sigma_base=sigma_decay(sigma_start, sigma_goal, n_metaepochs)
-#         std_modifier=sigma_start*sigma_base**meta
+#         sigma_base=sigma_decay(sigma_start, sigma_goal, n_decay_epochs)
+#         if n_decay_epochs < meta:
+#           std_modifier=sigma_start*sigma_base**meta
+#         else:
+#           std_modifier=sigma_start*sigma_base**n_decay_epochs
 # 
 #     if meta ==0:
-#         #father_key=jax.random.PRNGKey(starting_key)
-#         #father_weights = conv_init(father_key, (batch_size,28,28,1))
-#         #father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
-#         offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
-#         if use_father:
-#           offspring_list[0]=father_weights
-# 
-#     if meta >=1:
-#         if create_offsprings_bool:
-#           father_weights=softmax_offlist(offspring_list,[x[0] for x in result_list_metaepoch],temp)
+#         if use_pickle:
+#           father_weights = best_weights
+#          # with open(r"/content/long_run_fatherweights_04.04.22.pkl", "rb") as input_file:
+#           #  father_weights = cPickle.load(input_file)
+#         else:
+#           #print("start creating offsprings")
+#           father_key=jax.random.PRNGKey(starting_key)
+#           father_weights = conv_init(father_key, (batch_size,28,28,1))
+#           father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
 #           offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
 #           if use_father:
 #             offspring_list[0]=father_weights
-#         else:
-#           father_weights=softmax_conv_weights(father_weights,keylist_metaepoch, [x[0] for x in result_list_metaepoch],0.02)
-#           keylist_metaepoch=[]
+#           #print("end creating offsprings")
+#     if meta >=1:
+#         father_weights=softmax_offlist(offspring_list,[x[0] for x in result_list_metaepoch],temp)
+#         offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
+#         if use_father:
+#           offspring_list[0]=best_weights
+#           offspring_list[1]=father_weights
+#         
 # 
 #     result_list_metaepoch=[]
 #     for i in range(n_offsprings):
-#       if create_offsprings_bool:
-#         conv_weights=offspring_list[i]
-#         rng = jax.random.PRNGKey(starting_key+meta+i)
-#       else:
-#         keylist_metaepoch.append(starting_key+meta+i)
-#         rng = jax.random.PRNGKey(starting_key+meta+i)
-# 
-#         key_matrix = conv_init(rng, (batch_size,28,28,1))[1]
-#         key_matrix=jax.tree_map(lambda x: x*std_modifier, key_matrix)
-#         conv_weights=jax.tree_map(lambda x,y: x+y, father_weights,key_matrix)
+#       conv_weights=offspring_list[i]
+#       rng = jax.random.PRNGKey(starting_key+meta+i)
+#       
 # 
 # 
+#       x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=n_offsp_epoch*n_samples,test_size=n_offsp_epoch*n_test,stratify=y,random_state=(starting_key+meta+i))
 # 
-#       train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-#       train_lbl_off=train_lbls[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-#       train_img_off=train_img_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
-#       train_lbl_off=train_lbl_off.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
+#       x_train=x_train.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
+#       y_train=y_train.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
 # 
-#       test_img_off=test_images[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
-#       test_lbl_off=test_lbls[random.randint(rng, (n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
-#       test_img_off=test_img_off.reshape(n_offsp_epoch,n_test,28,28,1)
-#       test_lbl_off=test_lbl_off.reshape(n_offsp_epoch,n_test)
+#       x_test=x_test.reshape(n_offsp_epoch,n_test,28,28,1)
+#       y_test=y_test.reshape(n_offsp_epoch,n_test)
 # 
-#       #print(jnp.shape(train_img_off))
-#       #print(jnp.shape(train_lbl_off))
-#       #print(jnp.shape(test_img_off))
-#       #print(jnp.shape(test_lbl_off))
+#       #print(jnp.shape(x_train))
+#       #print(jnp.shape(y_train))
+#       #print(jnp.shape(x_test))
+#       #print(jnp.shape(y_test))
+# 
+#       
 # 
 # 
-#       result_off=jit_vmap_bootstrapp_offspring_MLP(rng,conv_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
-#       #result=result.append([jnp.mean(result_off),jnp.std(result_off)])
-#     
+# 
+# 
+# 
+# 
+#       result_off=jit_vmap_bootstrapp_offspring_MLP(rng,conv_weights,x_train,y_train,x_test,y_test)
 #       result_list_metaepoch.append([float(jnp.mean(result_off)),float(jnp.std(result_off))])
+# 
+#     '''Check for best performer'''
 #     if  np.max(result_list_metaepoch, axis=0)[0]>best_performer[0]:
 #       best_performer=np.max(result_list_metaepoch, axis=0)
-#       print("New best performer:", best_performer)
-#     print("Metaepoch mean: {:.4f}, std: {:.2f}".format(np.mean(np.array([x[0] for x in result_list_metaepoch])),np.std(np.array([x[0] for x in result_list_metaepoch]))))
-#     
+#       best_weights=conv_weights
+#       print(f"New best performer mean: {best_performer[0]:.4f}, std: {best_performer[1]:.2f}")
+#       
+# 
+#     print("\tMetaepoch mean: {:.4f}, std: {:.2f}".format(np.mean(np.array([x[0] for x in result_list_metaepoch])),np.std(np.array([x[0] for x in result_list_metaepoch]))))
+#     print("\tMetaepoch max performer: {:.4f}, min performer: {:.4f}\n".format(np.max(np.array([x[0] for x in result_list_metaepoch])),np.min(np.array([x[0] for x in result_list_metaepoch]))))
 #     results_meta.append(np.mean(np.array(result_list_metaepoch), axis=0))
 
-np.max(result_list_metaepoch, axis=0)
-
-
-
-results_meta
-
 """# **Testing**"""
+
+dicta = [()] * len(father_weights)
+for idx,w in enumerate(father_weights):
+    if w:
+        w, b = w
+        #print("Weights : {}, Biases : {}".format(w.shape, b.shape))
+  
+        '''if weight layer only contains 0 and 1, only copy original weight layer, dont add random noise. Purpose of these 0 and 1 layers unclear'''
+        if any(w[0].shape==t for t in [(Convu1_in,) ,(Convu2_in,), (Convu3_in,)]):
+          x_w=w
+          x_b=b
+        else:
+          seed=np.random.randint(0,100000)
+          key = random.PRNGKey(seed)
+          x_w = w+random.normal(key,shape=w.shape)*std_modifier
+          x_b = b+random.normal(key,shape=b.shape)*std_modifier
+          print("\n\n\n")
+          print("diff x_w",jax.tree_map(lambda x,y: x-y, x_w,w))
+          print("\n\n\n")
+          print("diff x_b",jax.tree_map(lambda x,y: x-y, x_b,b))
+          print("\n\n\n")
+        dicta[idx]=(x_w,x_b)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+from collections import Counter
+
+words = list(np.array(y_test))
+
+print(Counter(words).keys()) # equals to list(set(words))
+print(Counter(words).values()) # counts the elements' frequency
+
+
+
+
+
+
 
 import os
   path=os.path.join("/content/long_run_fatherweights_04.04.22.pkl")
@@ -495,27 +494,6 @@ import os
 
     pickle.dump(father_weights, f, pickle.HIGHEST_PROTOCOL)
     f.close()
-
-hund_key=jax.random.PRNGKey(121)
-hund = conv_init(hund_key, (batch_size,28,28,1))
-hund = hund[1] ## Weights are actually stored in second element of two value tuple
-
-affe_key=jax.random.PRNGKey(122)
-affe = conv_init(affe_key, (batch_size,28,28,1))
-affe = affe[1] ## Weights are actually stored in second element of two value tuple
-
-temp1=0.2
-temp2=0.4
-diff=jax.tree_map(lambda x,y: (x*temp1+y*temp2), hund,affe)
-
-train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
-train_lbl_off=train_lbls[random.randint(rng, (150,), 0, 60000, dtype='uint8')]
-unique, counts=np.unique(np.array(train_lbl_off),return_counts=True)
-
-
-print (np.asarray((unique, counts)).T)
-
-top_dog
 
 """# Archiv"""
 
@@ -580,31 +558,31 @@ jax.flatten_util.ravel_pytree(conv_weights)
 # father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
 # 
 # 
-# train_img_off=train_images[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
-# train_lbl_off=train_lbls[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
-# train_img_off=train_img_off.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
-# train_lbl_off=train_lbl_off.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size)
+# x_train=train_images[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
+# y_train=train_lbls[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_samples), 0, 60000, dtype='uint8')]
+# x_train=x_train.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
+# y_train=y_train.reshape(n_metaepochs,n_offsp_epoch,int((n_samples/batch_size)),batch_size)
 # 
 # test_img_off=test_images[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')] #n_testing_epochs not implemented, only running one testing epoch per offspring epoch
 # test_lbl_off=test_lbls[random.randint(rng, (n_metaepochs,n_offsp_epoch*n_test,), 0, 10000, dtype='uint8')]
 # test_img_off=test_img_off.reshape(n_metaepochs,n_offsp_epoch,n_test,28,28,1)
 # test_lbl_off=test_lbl_off.reshape(n_metaepochs,n_offsp_epoch,n_test)
 # 
-# print(jnp.shape(train_img_off))
-# print(jnp.shape(train_lbl_off))
+# print(jnp.shape(x_train))
+# print(jnp.shape(y_train))
 # print(jnp.shape(test_img_off))
 # print(jnp.shape(test_lbl_off))
 # key_matrix_seed=jnp.full((n_metaepochs,),np.arange(0, n_metaepochs, 1))
 # 
-# affe=vmap_offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP)
+# affe=vmap_offspring_run(key_matrix_seed,x_train,y_train,test_img_off,test_lbl_off,rngkey_MLP)
 # print(affe)
 
 '''VMap/Batch of whole metaepoch. Runnning with 5 metaepochs, Kernel crushing with 10'''
-def vmap_offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP):
-  return vmap(offspring_run, ( 0,0, 0,0,0,None))(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP)
+def vmap_offspring_run(key_matrix_seed,x_train,y_train,test_img_off,test_lbl_off,rngkey_MLP):
+  return vmap(offspring_run, ( 0,0, 0,0,0,None))(key_matrix_seed,x_train,y_train,test_img_off,test_lbl_off,rngkey_MLP)
 
 @jit
-def offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_lbl_off,rngkey_MLP):
+def offspring_run(key_matrix_seed,x_train,y_train,test_img_off,test_lbl_off,rngkey_MLP):
 
   
   
@@ -614,7 +592,7 @@ def offspring_run(key_matrix_seed,train_img_off,train_lbl_off,test_img_off,test_
   conv_weights=jax.tree_map(lambda x,y: x+y, father_weights,key_matrix)
 
   
-  result_off=jit_vmap_bootstrapp_offspring_MLP(rngkey_MLP,conv_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
+  result_off=jit_vmap_bootstrapp_offspring_MLP(rngkey_MLP,conv_weights,x_train,y_train,test_img_off,test_lbl_off)
   return(jnp.mean(result_off))
   #jnp.std(result_off)
 
@@ -815,3 +793,78 @@ def best_index_bestperformer(lista):
             index=i
             hilf=lista[i][2].item()
     return index
+
+'''softmax from keylist for approach 1'''
+def softmax_conv_weights(father_weights,keylist, acc_list,temp):
+  temp_list=softmax(acc_list,temp)
+  for k in range(len(keylist)):
+        if k==0:
+          top_dog = father_weights
+          top_dog=jax.tree_map(lambda x: x*temp_list[k], top_dog)
+        else:
+          rng_soft = jax.random.PRNGKey(k)
+          general_dog = conv_init(rng_soft, (batch_size,28,28,1))[1]
+          top_dog=jax.tree_map(lambda x,y: x+y*std_modifier*temp_list[k], top_dog,general_dog)
+  return top_dog
+
+'''#test better performer 1
+conv_init, conv_apply = stax.serial(
+    stax.Conv(Convu1_in,(3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    stax.Conv(Convu2_in, (3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    
+)
+'''
+
+'''Convu1_in=12
+Convu2_in=24
+#test better performer 2, good performance
+conv_init, conv_apply = stax.serial(
+    stax.Conv(Convu1_in,(3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    stax.Conv(Convu2_in, (3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+   
+)
+'''
+
+''' #Source Robert Lange
+conv_init, conv_apply = stax.serial(stax.Conv(12, (5, 5), (1, 1), padding="SAME"),
+                                 stax.BatchNorm(), stax.Relu,
+                                 stax.Conv(24, (5, 5), (1, 1), padding="SAME"),
+                                 stax.BatchNorm(), stax.Relu,
+                                 stax.Conv(24, (3, 3), (1, 1), padding="SAME"),
+                                 stax.BatchNorm(), stax.Relu,
+                                 stax.Conv(10, (3, 3), (1, 1), padding="SAME"), stax.BatchNorm(),stax.Relu
+                                 )'''
+
+'''train_dataset = MNIST(root='train_mnist', train=True, download=True,transform=torchvision.transforms.Compose([
+                                            torchvision.transforms.ToTensor(),
+                                            torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
+
+test_dataset = MNIST(root='test_mnist', train=False, download=True,transform=torchvision.transforms.Compose([
+                                            torchvision.transforms.ToTensor(),
+                                            torchvision.transforms.Normalize((0.1307,), (0.3081,))]))
+
+train_images = jnp.array(train_dataset.data,dtype="float32").reshape(len(train_dataset), -1)
+train_lbls = jnp.array(train_dataset.targets)
+
+test_images = jnp.array(test_dataset.data,dtype="float32").reshape(len(test_dataset), -1)
+test_lbls = jnp.array(test_dataset.targets)
+'''
+
+file = open("/content/long_run_fatherweights_04.04.22.pkl",'rb')
+object_file = pickle.load(file)
+file.close()
+
+with open(r"/content/long_run_fatherweights_04.04.22.pkl", "rb") as input_file:
+  father_weights = cPickle.load(input_file)
