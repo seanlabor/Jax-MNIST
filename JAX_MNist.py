@@ -70,13 +70,15 @@ n_offsprings=100
 n_metaepochs=10
 
 
-NNin1=2500 #dependent on Convu
+NNin1=8112 #dependent on Convu
 NNout1=10
 
+
+
 '''Convunet'''
-Convu1_in=32
-Convu2_in=16
-Convu3_in=4
+Convu1_in=1
+Convu2_in=12
+Convu3_in=24
 seed_convu=0
 
 n_samples=150 #number of training samples
@@ -150,8 +152,14 @@ def init_MLP(layer_widths, parent_key, scale=0.01):
 
 # test
 #key = jax.random.PRNGKey(seed)
-#MLP_params = init_MLP([2500, 10], key)
+#MLP_params = init_MLP([NNin1, 10], key)
 #print(jax.tree_map(lambda x: x.shape, MLP_params))
+
+
+
+Convu1_in=16
+Convu2_in=24
+Convu3_in=4
 
 conv_init, conv_apply = stax.serial(
     stax.Conv(Convu1_in,(3,3), padding="SAME"),
@@ -166,6 +174,60 @@ conv_init, conv_apply = stax.serial(
     stax.Relu,
     stax.MaxPool((2,2))
 )
+
+#test better performer 1
+conv_init, conv_apply = stax.serial(
+    stax.Conv(Convu1_in,(3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    stax.Conv(Convu2_in, (3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    
+)
+
+Convu1_in=12
+Convu2_in=24
+#test better performer 2, good performance
+conv_init, conv_apply = stax.serial(
+    stax.Conv(Convu1_in,(3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+    stax.Conv(Convu2_in, (3,3), strides=(1,1),padding="SAME"),
+    stax.BatchNorm(),
+    stax.Relu,
+    stax.MaxPool((2,2)),
+   
+)
+
+'''Robert lange'''
+conv_init, conv_apply = stax.serial(stax.Conv(12, (5, 5), (1, 1), padding="SAME"),
+                                 stax.BatchNorm(), stax.Relu,
+                                 stax.Conv(24, (5, 5), (1, 1), padding="SAME"),
+                                 stax.BatchNorm(), stax.Relu,
+                                 stax.Conv(24, (3, 3), (1, 1), padding="SAME"),
+                                 stax.BatchNorm(), stax.Relu,
+                                 stax.Conv(10, (3, 3), (1, 1), padding="SAME"), stax.BatchNorm(),stax.Relu
+                                 )
+
+'''Test if convu out and NN in matches'''
+NNin1=2500
+rng=jax.random.PRNGKey(1)
+
+father_weights = conv_init(rng, (batch_size,28,28,1))
+father_weights = father_weights[1]
+
+
+train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+testaffe=train_img_off[0:5]
+imgs = conv_apply(father_weights, testaffe.reshape(-1,28,28,1))
+
+MLP_params = init_MLP([NNin1, 10], rng)
+
+pred_classes = jnp.argmax(jit_batched_MLP_predict(MLP_params, imgs.reshape(-1,NNin1)), axis=1)
 
 @jit
 def MLP_predict(params, x):
@@ -209,7 +271,7 @@ jit_update=jit(update)
 def accuracy(conv_weights,MLP_params, dataset_imgs, dataset_lbls):
 
     imgs = conv_apply(conv_weights, dataset_imgs.reshape(-1,28,28,1))
-    pred_classes = jnp.argmax(jit_batched_MLP_predict(MLP_params, imgs.reshape(-1,2500)), axis=1)
+    pred_classes = jnp.argmax(jit_batched_MLP_predict(MLP_params, imgs.reshape(-1,NNin1)), axis=1)
 
     return jnp.mean(dataset_lbls == pred_classes)
     
@@ -223,7 +285,7 @@ def train(conv_weights, imgs, lbls,MLP_params ):
 
     gt_labels = jax.nn.one_hot(lbls[i], 10)
     img_conv = conv_apply(conv_weights, imgs[i].reshape(-1,28,28,1))
-    loss, MLP_params = jit_update(MLP_params, img_conv.reshape(-1,2500), gt_labels)
+    loss, MLP_params = jit_update(MLP_params, img_conv.reshape(-1,NNin1), gt_labels)
 
   return MLP_params
   
@@ -264,42 +326,124 @@ def vmap_bootstrapp_offspring_MLP(key, conv_weights, batch_affe, labelaffe,test_
   
 jit_vmap_bootstrapp_offspring_MLP=jit(vmap_bootstrapp_offspring_MLP)
 
+
+
+'''creating offsprings Approach 2'''
+def create_offsprings(n_offspr, fath_weights,std_modifier):
+  statedic_list=[]
+  for i in range(0,n_offspr):
+    dicta = [()] * len(father_weights)
+    for idx,w in enumerate(father_weights):
+        if w:
+            w, b = w
+            #print("Weights : {}, Biases : {}".format(w.shape, b.shape))
+      
+            '''if weight layer only contains 0 and 1, only copy original weight layer, dont add random noise. Purpose of these 0 and 1 layers unclear'''
+            if any(w[0].shape==t for t in [(Convu1_in,) ,(Convu2_in,), (Convu3_in,)]):
+              x_w=w
+              x_b=b
+            else:
+              seed=np.random.randint(0,100000)
+              key = random.PRNGKey(seed)
+              x_w = w+random.normal(key,shape=w.shape)*std_modifier
+              x_b = b+random.normal(key,shape=b.shape)*std_modifier
+            dicta[idx]=(x_w,x_b)
+    
+    statedic_list.append(dicta)
+  return statedic_list
+
+'''softmax for offspring list for approach 2'''
+def softmax_offlist(off_list,acc_list,temp):
+  temp_list=softmax_result(acc_list,temp)
+  for i in range(len(off_list)):
+    if i==0:
+      top_dog=jax.tree_map(lambda x: x*temp_list[i], off_list[i])
+    else:
+      general_dog = jax.tree_map(lambda x: x*temp_list[i], off_list[i])
+      top_dog=jax.tree_map(lambda x,y: x+y, top_dog,general_dog)
+  return top_dog
+
+'''softmax from keylist for approach 1'''
+def softmax_conv_weights(father_weights,keylist, acc_list,temp):
+  temp_list=softmax(acc_list,temp)
+  for k in range(len(keylist)):
+        if k==0:
+          top_dog = father_weights
+          top_dog=jax.tree_map(lambda x: x*temp_list[k], top_dog)
+        else:
+          rng_soft = jax.random.PRNGKey(k)
+          general_dog = conv_init(rng_soft, (batch_size,28,28,1))[1]
+          top_dog=jax.tree_map(lambda x,y: x+y*std_modifier*temp_list[k], top_dog,general_dog)
+  return top_dog
+
+'''Creates softmax/temp list out of accuracy list [0.2,0.3,....,0.8]'''
+def softmax_result(results,temp: float):
+    x = [z/temp for z in results]
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum()
+
+def sigma_decay(start, end, n_iter):
+  return(end/start)**(1/n_iter)
+
 '''Initialize Variables'''
 
 n_samples = 150
 batch_size = 25
-n_offsp_epoch=5
-n_metaepochs=5
+n_offsp_epoch=10
+n_metaepochs=2000
 
-n_offsprings=100
-starting_key=59 #define starting point
+n_offsprings=250
+'''keys'''
+starting_key=48 #define starting point
+MLP_key=685
+
+use_sigma_decay=False #otherwise using constant sigma from config tab
+sigma_start=1 
+sigma_goal=0.05 #sigma goal after n_metaepochs
+
 create_offsprings_bool=True
+use_father=True
 std_modifier=0.05
-temp=0.01 #weight for softmax
+temp=0.05 #weight for softmax
+
+
 
 # Commented out IPython magic to ensure Python compatibility.
 # #main code
 # %%time
-# 
+# #rng_MLP=jax.random.PRNGKey(MLP_key)
+# results_meta=[]
+# best_performer=[0.0,0.0]
 # for meta in range (n_metaepochs):
-#     
+# 
+#     if use_sigma_decay:
+#         sigma_base=sigma_decay(sigma_start, sigma_goal, n_metaepochs)
+#         std_modifier=sigma_start*sigma_base**meta
+# 
 #     if meta ==0:
-#         father_key=jax.random.PRNGKey(starting_key)
-#         father_weights = conv_init(father_key, (batch_size,28,28,1))
-#         father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
-#         offspring_list=create_offsprings(n_offsprings, father_weights)
+#         #father_key=jax.random.PRNGKey(starting_key)
+#         #father_weights = conv_init(father_key, (batch_size,28,28,1))
+#         #father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
+#         offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
+#         if use_father:
+#           offspring_list[0]=father_weights
+# 
 #     if meta >=1:
 #         if create_offsprings_bool:
 #           father_weights=softmax_offlist(offspring_list,[x[0] for x in result_list_metaepoch],temp)
-#           offspring_list=create_offsprings(n_offsprings, father_weights)
+#           offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
+#           if use_father:
+#             offspring_list[0]=father_weights
 #         else:
 #           father_weights=softmax_conv_weights(father_weights,keylist_metaepoch, [x[0] for x in result_list_metaepoch],0.02)
-#             
+#           keylist_metaepoch=[]
+# 
 #     result_list_metaepoch=[]
-#     keylist_metaepoch=[]
 #     for i in range(n_offsprings):
 #       if create_offsprings_bool:
 #         conv_weights=offspring_list[i]
+#         rng = jax.random.PRNGKey(starting_key+meta+i)
 #       else:
 #         keylist_metaepoch.append(starting_key+meta+i)
 #         rng = jax.random.PRNGKey(starting_key+meta+i)
@@ -328,66 +472,29 @@ temp=0.01 #weight for softmax
 # 
 #       result_off=jit_vmap_bootstrapp_offspring_MLP(rng,conv_weights,train_img_off,train_lbl_off,test_img_off,test_lbl_off)
 #       #result=result.append([jnp.mean(result_off),jnp.std(result_off)])
+#     
 #       result_list_metaepoch.append([float(jnp.mean(result_off)),float(jnp.std(result_off))])
-#     print(np.mean(np.array(result_list_metaepoch), axis=0))
+#     if  np.max(result_list_metaepoch, axis=0)[0]>best_performer[0]:
+#       best_performer=np.max(result_list_metaepoch, axis=0)
+#       print("New best performer:", best_performer)
+#     print("Metaepoch mean: {:.4f}, std: {:.2f}".format(np.mean(np.array([x[0] for x in result_list_metaepoch])),np.std(np.array([x[0] for x in result_list_metaepoch]))))
+#     
+#     results_meta.append(np.mean(np.array(result_list_metaepoch), axis=0))
+
+np.max(result_list_metaepoch, axis=0)
 
 
 
-'''working but going different approach with pytree.mapping'''
-def create_offsprings(n_offspr, fath_weights):
-  statedic_list=[]
-  for i in range(0,n_offspr):
-    dicta = [()] * len(father_weights)
-    for idx,w in enumerate(father_weights):
-        if w:
-            w, b = w
-            #print("Weights : {}, Biases : {}".format(w.shape, b.shape))
-      
-            '''if weight layer only contains 0 and 1, only copy original weight layer, dont add random noise. Purpose of these 0 and 1 layers unclear'''
-            if any(w[0].shape==t for t in [(Convu1_in,) ,(Convu2_in,), (Convu3_in,)]):
-              x_w=w
-              x_b=b
-            else:
-              #seed=random.randint(rng,(0,100000)
-              key = random.PRNGKey(0)
-              x_w = w+random.normal(key,shape=w.shape)*std_modifier
-              x_b = b+random.normal(key,shape=b.shape)*std_modifier
-            dicta[idx]=(x_w,x_b)
-    
-    statedic_list.append(dicta)
-  return statedic_list
-
-def softmax_offlist(off_list,acc_list,temp):
-  temp_list=softmax_result(acc_list,temp)
-  for i in range(len(off_list)):
-    if i==0:
-      top_dog=jax.tree_map(lambda x: x*temp_list[i], off_list[i])
-    else:
-      general_dog = jax.tree_map(lambda x: x*temp_list[i], off_list[i])
-      top_dog=jax.tree_map(lambda x,y: x+y, top_dog,general_dog)
-  return top_dog
-
-''''''
-def softmax_conv_weights(father_weights,keylist, acc_list,temp):
-  temp_list=softmax(acc_list,temp)
-  for k in range(len(keylist)):
-        if k==0:
-          top_dog = father_weights
-          top_dog=jax.tree_map(lambda x: x*temp_list[k], top_dog)
-        else:
-          rng_soft = jax.random.PRNGKey(k)
-          general_dog = conv_init(rng_soft, (batch_size,28,28,1))[1]
-          top_dog=jax.tree_map(lambda x,y: x+y*std_modifier*temp_list[k], top_dog,general_dog)
-  return top_dog
-
-'''Creates softmax/temp list out of accuracy list [0.2,0.3,....,0.8]'''
-def softmax_result(results,temp: float):
-    x = [z/temp for z in results]
-    """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum()
+results_meta
 
 """# **Testing**"""
+
+import os
+  path=os.path.join("/content/long_run_fatherweights_04.04.22.pkl")
+  with open(path, 'wb') as f:
+
+    pickle.dump(father_weights, f, pickle.HIGHEST_PROTOCOL)
+    f.close()
 
 hund_key=jax.random.PRNGKey(121)
 hund = conv_init(hund_key, (batch_size,28,28,1))
@@ -401,7 +508,12 @@ temp1=0.2
 temp2=0.4
 diff=jax.tree_map(lambda x,y: (x*temp1+y*temp2), hund,affe)
 
+train_img_off=train_images[random.randint(rng, (n_offsp_epoch*n_samples,), 0, 60000, dtype='uint8')]
+train_lbl_off=train_lbls[random.randint(rng, (150,), 0, 60000, dtype='uint8')]
+unique, counts=np.unique(np.array(train_lbl_off),return_counts=True)
 
+
+print (np.asarray((unique, counts)).T)
 
 top_dog
 
