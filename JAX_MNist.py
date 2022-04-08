@@ -16,6 +16,7 @@ import numpy as np
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 import jax
+import pickle
 from jax import jit, vmap, pmap, grad, value_and_grad
 import random
 from torchvision.datasets import MNIST
@@ -335,19 +336,19 @@ def sigma_decay(start, end, n_iter):
 '''Initialize Variables'''
 import _pickle as cPickle
 
-n_training_epochs=10 #= how many times, is the MLP trained with the same data. Reduces dependance on the initialization of MLP weights
+n_training_epochs=20 #= how many times, is the MLP trained with the same data. Reduces dependance on the initialization of MLP weights
 
 n_samples = 100 #n of training independent training samples for MLP, samples are stratified
 batch_size = 25
 n_test=500
-n_offsp_epoch=10 #Bootstrapping, delivers more stable results for every offspring
+n_offsp_epoch=8 #Bootstrapping, delivers more stable results for every offspring
 
 '''keys'''
 starting_key=48 #define starting point
 MLP_key=685 #seed 
 
 use_sigma_decay=True #otherwise using constant sigma from config tab
-n_decay_epochs=500   # over how many metaepochs sigma is decayed
+n_decay_epochs=n_metaepochs/2   # over how many metaepochs sigma is decayed
 sigma_start=1 
 sigma_goal=0.05 #sigma goal after n_metaepochs
 
@@ -359,85 +360,103 @@ temp=0.02 #weight for softmax
 n_metaepochs=1000
 n_offsprings=250
 
-# Commented out IPython magic to ensure Python compatibility.
-# #main code
-# %%time
-# #rng_MLP=jax.random.PRNGKey(MLP_key)
-# results_meta=[]
-# best_performer=[0.0,0.0]
-# for meta in range (n_metaepochs):
-# 
-#     if use_sigma_decay:
-#         sigma_base=sigma_decay(sigma_start, sigma_goal, n_decay_epochs)
-#         if n_decay_epochs < meta:
-#           std_modifier=sigma_start*sigma_base**meta
-#         else:
-#           std_modifier=sigma_start*sigma_base**n_decay_epochs
-# 
-#     if meta ==0:
-#         if use_pickle:
-#           father_weights = best_weights
-#          # with open(r"/content/long_run_fatherweights_04.04.22.pkl", "rb") as input_file:
-#           #  father_weights = cPickle.load(input_file)
-#         else:
-#           #print("start creating offsprings")
-#           father_key=jax.random.PRNGKey(starting_key)
-#           father_weights = conv_init(father_key, (batch_size,28,28,1))
-#           father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
-#           offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
-#           if use_father:
-#             offspring_list[0]=father_weights
-#           #print("end creating offsprings")
-#     if meta >=1:
-#         father_weights=softmax_offlist(offspring_list,[x[0] for x in result_list_metaepoch],temp)
-#         offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
-#         if use_father:
-#           offspring_list[0]=best_weights
-#           offspring_list[1]=father_weights
-#         
-# 
-#     result_list_metaepoch=[]
-#     for i in range(n_offsprings):
-#       conv_weights=offspring_list[i]
-#       rng = jax.random.PRNGKey(starting_key+meta+i)
-#       
-# 
-# 
-#       x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=n_offsp_epoch*n_samples,test_size=n_offsp_epoch*n_test,stratify=y,random_state=(starting_key+meta+i))
-# 
-#       x_train=x_train.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
-#       y_train=y_train.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
-# 
-#       x_test=x_test.reshape(n_offsp_epoch,n_test,28,28,1)
-#       y_test=y_test.reshape(n_offsp_epoch,n_test)
-# 
-#       #print(jnp.shape(x_train))
-#       #print(jnp.shape(y_train))
-#       #print(jnp.shape(x_test))
-#       #print(jnp.shape(y_test))
-# 
-#       
-# 
-# 
-# 
-# 
-# 
-# 
-#       result_off=jit_vmap_bootstrapp_offspring_MLP(rng,conv_weights,x_train,y_train,x_test,y_test)
-#       result_list_metaepoch.append([float(jnp.mean(result_off)),float(jnp.std(result_off))])
-# 
-#     '''Check for best performer'''
-#     if  np.max(result_list_metaepoch, axis=0)[0]>best_performer[0]:
-#       best_performer=np.max(result_list_metaepoch, axis=0)
-#       best_weights=conv_weights
-#       print(f"New best performer mean: {best_performer[0]:.4f}, std: {best_performer[1]:.2f}")
-#       
-# 
-#     print("\tMetaepoch mean: {:.4f}, std: {:.2f}".format(np.mean(np.array([x[0] for x in result_list_metaepoch])),np.std(np.array([x[0] for x in result_list_metaepoch]))))
-#     print("\tMetaepoch max performer: {:.4f}, min performer: {:.4f}\n".format(np.max(np.array([x[0] for x in result_list_metaepoch])),np.min(np.array([x[0] for x in result_list_metaepoch]))))
-#     results_meta.append(np.mean(np.array(result_list_metaepoch), axis=0))
+#main code
+import _pickle as cPickle
+#rng_MLP=jax.random.PRNGKey(MLP_key)
+results_meta=[]
+best_performer=[0.0,0.0]
+for meta in range (n_metaepochs):
+
+    if use_sigma_decay:
+        sigma_base=sigma_decay(sigma_start, sigma_goal, n_decay_epochs)
+        if n_decay_epochs < meta:
+          std_modifier=sigma_start*sigma_base**meta
+        else:
+          std_modifier=sigma_start*sigma_base**n_decay_epochs
+
+    if meta ==0:
+        if use_pickle:
+          #father_weights = best_weights
+          with open(r"/content/drive/MyDrive/Colab Notebooks/MNist/best_weight.pkl", "rb") as input_file:
+            father_weights = cPickle.load(input_file)
+            offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
+            if use_father:
+              offspring_list[0]=father_weights
+        else:
+          
+          father_key=jax.random.PRNGKey(starting_key)
+          father_weights = conv_init(father_key, (batch_size,28,28,1))
+          father_weights = father_weights[1] ## Weights are actually stored in second element of two value tuple
+          offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
+          if use_father:
+            offspring_list[0]=best_weights
+            offspring_list[1]=father_weights
+          
+    if meta >=1:
+        father_weights=softmax_offlist(offspring_list,[x[0] for x in result_list_metaepoch],temp)
+        offspring_list=create_offsprings(n_offsprings, father_weights,std_modifier)
+        if use_father:
+          offspring_list[0]=best_weights
+          offspring_list[1]=father_weights
+        
+
+    result_list_metaepoch=[]
+    for i in range(n_offsprings):
+      conv_weights=offspring_list[i]
+      rng = jax.random.PRNGKey(starting_key+meta+i)
+      
+      '''same data for every offspring'''
+      x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=n_offsp_epoch*n_samples,test_size=n_offsp_epoch*n_test,stratify=y,random_state=(starting_key+meta))
+      #x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=n_offsp_epoch*n_samples,test_size=n_offsp_epoch*n_test,stratify=y,random_state=(starting_key+meta+i))
+
+      x_train=x_train.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size,28,28,1)
+      y_train=y_train.reshape(n_offsp_epoch,int((n_samples/batch_size)),batch_size)
+
+      x_test=x_test.reshape(n_offsp_epoch,n_test,28,28,1)
+      y_test=y_test.reshape(n_offsp_epoch,n_test)
+
+      #print(jnp.shape(x_train))
+      #print(jnp.shape(y_train))
+      #print(jnp.shape(x_test))
+      #print(jnp.shape(y_test))
+
+      
+
+
+
+
+
+
+      result_off=jit_vmap_bootstrapp_offspring_MLP(rng,conv_weights,x_train,y_train,x_test,y_test)
+      result_list_metaepoch.append([float(jnp.mean(result_off)),float(jnp.std(result_off))])
+
+    '''Check for best performer'''
+    if  np.max(result_list_metaepoch, axis=0)[0]>best_performer[0]:
+      best_performer=np.max(result_list_metaepoch, axis=0)
+      best_weights=conv_weights
+      with open("/content/drive/MyDrive/Colab Notebooks/MNist/best_weight.pkl", 'wb') as f:
+        pickle.dump(best_weights, f, pickle.HIGHEST_PROTOCOL)
+        f.close()
+      print(f"New best performer mean: {best_performer[0]:.4f}, std: {best_performer[1]:.2f}")
+      
+
+    print("\tMetaepoch mean: {:.4f}, std: {:.2f}".format(np.mean(np.array([x[0] for x in result_list_metaepoch])),np.std(np.array([x[0] for x in result_list_metaepoch]))))
+    print("\tMetaepoch max performer: {:.4f}, min performer: {:.4f}\n".format(np.max(np.array([x[0] for x in result_list_metaepoch])),np.min(np.array([x[0] for x in result_list_metaepoch]))))
+    results_meta.append(np.mean(np.array(result_list_metaepoch), axis=0))
 
 """# **Testing**"""
+
+with open("/content/drive/MyDrive/Colab Notebooks/MNist/best_weight.pkl", 'wb') as f:
+
+        pickle.dump(best_weights, f, pickle.HIGHEST_PROTOCOL)
+        f.close()
+
+from google.colab import drive
+drive.mount('/content/drive')
+
+
+
+
 
 dicta = [()] * len(father_weights)
 for idx,w in enumerate(father_weights):
